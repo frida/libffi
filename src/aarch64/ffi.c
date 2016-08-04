@@ -1136,6 +1136,7 @@ ffi_prep_go_closure (ffi_go_closure *closure, ffi_cif* cif,
    descriptors, invokes the wrapped function, then marshalls the return
    value back into the call context.  */
 
+FFI_ASAN_NO_SANITIZE
 int FFI_HIDDEN
 ffi_closure_SYSV_inner (ffi_cif *cif,
 			void (*fun)(ffi_cif*,void*,void**,void*),

@@ -361,6 +361,7 @@ extern void ffi_call_SYSV (void *stack, struct call_frame *,
 extern void ffi_call_VFP (void *vfp_space, struct call_frame *,
 			   void (*fn) (void), unsigned vfp_used) FFI_HIDDEN;
 
+FFI_ASAN_NO_SANITIZE
 static void
 ffi_call_int (ffi_cif * cif, void (*fn) (void), void *rvalue,
 	      void **avalue, void *closure)
@@ -568,6 +569,7 @@ struct closure_frame
   char argp[];
 };
 
+FFI_ASAN_NO_SANITIZE
 int FFI_HIDDEN
 ffi_closure_inner_SYSV (ffi_cif *cif,
 		        void (*fun) (ffi_cif *, void *, void **, void *),
@@ -581,6 +583,7 @@ ffi_closure_inner_SYSV (ffi_cif *cif,
   return cif->flags;
 }
 
+FFI_ASAN_NO_SANITIZE
 int FFI_HIDDEN
 ffi_closure_inner_VFP (ffi_cif *cif,
 		       void (*fun) (ffi_cif *, void *, void **, void *),

@@ -1264,6 +1264,7 @@ out:
   return FFI_OK;
 }
 
+FFI_ASAN_NO_SANITIZE
 int FFI_HIDDEN
 ffi_closure_unix64_inner(ffi_cif *cif,
 			 void (*fun)(ffi_cif*, void*, void**, void*),

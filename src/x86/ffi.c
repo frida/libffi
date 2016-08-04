@@ -447,6 +447,7 @@ struct closure_frame
   void *user_data;				/* 36 */
 };
 
+FFI_ASAN_NO_SANITIZE
 int FFI_HIDDEN FFI_DECLARE_FASTCALL
 ffi_closure_inner (struct closure_frame *frame, char *stack)
 {
