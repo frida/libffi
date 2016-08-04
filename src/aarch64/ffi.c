@@ -572,6 +572,16 @@ extern void ffi_call_SYSV (struct call_context *context, void *frame,
 
 /* Call a function with the provided arguments and capture the return
    value.  */
+#ifndef __SANITIZE_ADDRESS__
+# ifdef __clang__
+#  if __has_feature(address_sanitizer)
+#   define __SANITIZE_ADDRESS__
+#  endif
+# endif
+#endif
+#ifdef __SANITIZE_ADDRESS__
+__attribute__((noinline,no_sanitize_address))
+#endif
 static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *orig_rvalue,
 	      void **avalue, void *closure)
@@ -873,6 +883,16 @@ ffi_prep_go_closure (ffi_go_closure *closure, ffi_cif* cif,
    descriptors, invokes the wrapped function, then marshalls the return
    value back into the call context.  */
 
+#ifndef __SANITIZE_ADDRESS__
+# ifdef __clang__
+#  if __has_feature(address_sanitizer)
+#   define __SANITIZE_ADDRESS__
+#  endif
+# endif
+#endif
+#ifdef __SANITIZE_ADDRESS__
+__attribute__((noinline,no_sanitize_address))
+#endif
 int FFI_HIDDEN
 ffi_closure_SYSV_inner (ffi_cif *cif,
 			void (*fun)(ffi_cif*,void*,void**,void*),
