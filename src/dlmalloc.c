@@ -1727,6 +1727,8 @@ static int os2munmap(void* ptr, size_t size) {
    FORCEINLINE with an 'extern' storage class, which clashes with 'static'.  */
 static void* win32mmap(size_t size) {
   void* ptr = VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+  if (ptr != 0)
+    mem_callbacks.on_allocate(ptr, size);
   return (ptr != 0)? ptr: MFAIL;
 }
 
@@ -1734,24 +1736,29 @@ static void* win32mmap(size_t size) {
 static void* win32direct_mmap(size_t size) {
   void* ptr = VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT|MEM_TOP_DOWN,
                            PAGE_EXECUTE_READWRITE);
+  if (ptr != 0)
+    mem_callbacks.on_allocate(ptr, size);
   return (ptr != 0)? ptr: MFAIL;
 }
 
 /* This function supports releasing coalesed segments */
 static int win32munmap(void* ptr, size_t size) {
   MEMORY_BASIC_INFORMATION minfo;
-  char* cptr = (char*)ptr;
-  while (size) {
+  char* cptr = ptr;
+  size_t remaining = size;
+  while (remaining) {
     if (VirtualQuery(cptr, &minfo, sizeof(minfo)) == 0)
       return -1;
     if (minfo.BaseAddress != cptr || minfo.AllocationBase != cptr ||
-        minfo.State != MEM_COMMIT || minfo.RegionSize > size)
+        minfo.State != MEM_COMMIT || minfo.RegionSize > remaining)
       return -1;
     if (VirtualFree(cptr, 0, MEM_RELEASE) == 0)
       return -1;
     cptr += minfo.RegionSize;
-    size -= minfo.RegionSize;
+    remaining -= minfo.RegionSize;
   }
+  if (size != 0)
+    mem_callbacks.on_deallocate(ptr, size);
   return 0;
 }
 
