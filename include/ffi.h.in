@@ -486,6 +486,17 @@ FFI_API
 ffi_status ffi_get_struct_offsets (ffi_abi abi, ffi_type *struct_type,
 				   size_t *offsets);
 
+typedef struct {
+  void* (*malloc)(size_t);
+  void* (*calloc)(size_t,size_t);
+  void  (*free)(void*);
+  void  (*on_allocate)(void*,size_t);
+  void  (*on_deallocate)(void*,size_t);
+} ffi_mem_callbacks;
+
+void ffi_deinit (void);
+void ffi_set_mem_callbacks (const ffi_mem_callbacks *callbacks);
+
 /* Useful for eliminating compiler warnings.  */
 #define FFI_FN(f) ((void (*)(void))f)
 
