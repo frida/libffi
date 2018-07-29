@@ -93,27 +93,22 @@ else
 endif
 
 # Exception handling frame
-if cc.get_id() == 'gcc' or cc.get_id() == 'llvm'
+if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
   # FIXME: Actually check for this instead of hard-coding it
-  # Also, check if this is actually correct
-  if host_cpu_family == 'x86_64'
-    message('.eh_frame is hard-coded to not be ro')
-    ffi_conf.set('EH_FRAME_FLAGS', '"aw"')
-  else
-    message('.eh_frame is hard-coded to ro')
-    ffi_conf.set('HAVE_RO_EH_FRAME', 1)
-    ffi_conf.set('EH_FRAME_FLAGS', '"a"')
-  endif
+  message('.eh_frame is hard-coded to ro')
+  ffi_conf.set('HAVE_RO_EH_FRAME', 1)
+  ffi_conf.set('EH_FRAME_FLAGS', '"a"')
 endif
 
-if host_cpu_family == 'arm' and host_system == 'darwin'
+if host_system == 'darwin' and (host_cpu_family == 'arm' or host_cpu_family == 'aarch64')
   message('Cannot use PROT_EXEC on this target, using fallback')
   ffi_conf.set('FFI_EXEC_TRAMPOLINE_TABLE', 1)
 else
   ffi_conf.set('FFI_EXEC_TRAMPOLINE_TABLE', 0)
 endif
 
-if host_system == 'darwin' or host_system == 'openbsd' or host_system == 'freebsd' or host_system == 'solaris'
+is_android = host_system == 'linux' and cc.has_header('android/api-level.h')
+if host_system == 'darwin' or host_system == 'openbsd' or host_system == 'freebsd' or host_system == 'solaris' or is_android
   message('Cannot use malloc on this target, using fallback')
   ffi_conf.set('FFI_MMAP_EXEC_WRIT', 1)
 endif
