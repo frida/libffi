@@ -88,6 +88,9 @@
 /* Define if read-only mmap of a plain file works. */
 #mesondefine HAVE_MMAP_FILE
 
+/* Define if your compiler supports pointer authentication. */
+#mesondefine HAVE_PTRAUTH
+
 /* Define if .eh_frame sections should be read-only. */
 #mesondefine HAVE_RO_EH_FRAME
 

@@ -1,4 +1,4 @@
-project('libffi', 'c', version : '3.3-rc0',
+project('libffi', 'c', version : '3.3',
         meson_version : '>= 0.47.0',
         default_options : ['buildtype=debugoptimized',
                            'warning_level=1'])
@@ -56,6 +56,19 @@ if host_cpu_family == 'x86' or host_cpu_family == 'x86_64'
     ffi_conf.set('HAVE_AS_STRING_PSEUDO_OP', 1)
   endif
 endif
+
+ptrauth = '''#ifdef __clang__
+# if __has_feature(ptrauth_calls)
+#  define HAVE_PTRAUTH 1
+# endif
+#endif
+
+#ifndef HAVE_PTRAUTH
+# error Pointer authentication not supported
+#endif
+'''
+ffi_conf.set('HAVE_PTRAUTH',
+  cc.compiles(ptrauth, name : 'pointer authentication'))
 
 # If not defined, define it as unsigned int
 size_t = cc.sizeof('size_t')
