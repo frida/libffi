@@ -1,5 +1,3 @@
-# Toggle this if you want extra debugging
-option('debug', type : 'boolean', value : false)
 # Toggle this if you do not want support for aggregate types
 option('structs', type : 'boolean', value : true)
 # Toggle this if you do not want support for the raw API

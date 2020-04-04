@@ -166,10 +166,11 @@ if host_system != 'windows'
   ffi_conf.set('HAVE_HIDDEN_VISIBILITY_ATTRIBUTE', 1)
 endif
 
-# User options
 if get_option('debug')
-  ffi_conf.set('FFI_DEBUG')
+  ffi_conf.set('FFI_DEBUG', 1)
 endif
+
+# User options
 if not get_option('raw_api')
   ffi_conf.set('FFI_NO_RAW_API', 1)
 endif
