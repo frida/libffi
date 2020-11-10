@@ -66,7 +66,7 @@ else
     ffi_c_sources += ['mips/ffi.c']
     ffi_asm_sources += ['mips/o32.S', 'mips/n32.S']
   else
-    error('Unsupported cpu family "@1@"'.format(host_cpu_family))
+    error('Unsupported cpu family "@0@"'.format(host_cpu_family))
   endif
 endif
 
