@@ -65,6 +65,11 @@ else
     TARGET = 'MIPS'
     ffi_c_sources += ['mips/ffi.c']
     ffi_asm_sources += ['mips/o32.S', 'mips/n32.S']
+  elif host_cpu_family == 's390x'
+    arch_subdir = 's390'
+    TARGET = 'S390'
+    ffi_c_sources += ['s390/ffi.c']
+    ffi_asm_sources += ['s390/sysv.S']
   else
     error('Unsupported cpu family "@0@"'.format(host_cpu_family))
   endif
