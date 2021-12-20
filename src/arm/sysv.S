@@ -93,7 +93,9 @@
 	SIZE(name)
 
 	.text
+#ifdef HAVE_AS_MODERN_PSEUDO_OPS
 	.syntax unified
+#endif
 #if defined(_WIN32)
 	/* Windows on ARM is thumb-only */
 	.thumb
@@ -109,7 +111,7 @@
 /* In thumb mode, instructions can be shorter than expected in arm mode, so
  * we need to align the start of each case. */
 # define E(index) .align 3
-#elif defined(__clang__)
+#elif defined(__clang__) || !defined(HAVE_AS_MODERN_PSEUDO_OPS)
 /* ??? The clang assembler doesn't handle .if with symbolic expressions.  */
 # define E(index)
 #else
@@ -120,7 +122,7 @@
 #endif
 
 
-#ifdef __ELF__
+#if defined(__ELF__) && defined(HAVE_AS_MODERN_PSEUDO_OPS)
 	/* We require interworking on LDM, which implies ARMv5T,
 	   which implies the existance of BLX.  */
  	.arch	armv5t
@@ -140,16 +142,20 @@ ARM_FUNC_START(ffi_call_VFP)
 	UNWIND(.fnstart)
 	cfi_startproc
 
+#ifdef HAVE_ARM_VFP
 	cmp	r3, #3			@ load only d0 if possible
 	ite	le
 	ldcle	p11, cr0, [r0]		@ vldrle d0, [r0]
 	ldcgt	p11, cr0, [r0], {16}	@ vldmgt r0, {d0-d7}
 	add	r0, r0, #64		@ discard the vfp register args
+#else
+	bkpt #16
+#endif
 	/* FALLTHRU */
 ARM_FUNC_END(ffi_call_VFP)
 
 ARM_FUNC_START(ffi_call_SYSV)
-	stm	r1, {fp, lr}
+	stmia	r1, {fp, lr}
 	mov	fp, r1
 
 	@ This is a bit of a lie wrt the origin of the unwind info, but
@@ -187,6 +193,7 @@ ARM_FUNC_START(ffi_call_SYSV)
 	.align	3
 #endif
 0:
+#ifdef HAVE_ARM_VFP
 E(ARM_TYPE_VFP_S)
 	stc	p10, cr0, [r2]		@ vstr s0, [r2]
 	pop	{fp,pc}
@@ -196,17 +203,28 @@ E(ARM_TYPE_VFP_D)
 E(ARM_TYPE_VFP_N)
 	stc	p11, cr0, [r2], {8}	@ vstm r2, {d0-d3}
 	pop	{fp,pc}
+#else
+E(ARM_TYPE_VFP_S)
+	bkpt #16
+	nop
+E(ARM_TYPE_VFP_D)
+	bkpt #16
+	nop
+E(ARM_TYPE_VFP_N)
+	bkpt #16
+	nop
+#endif
 E(ARM_TYPE_INT64)
 	str	r1, [r2, #4]
 	nop
 E(ARM_TYPE_INT)
 	str	r0, [r2]
-	pop	{fp,pc}
+	ldmia	sp!, {fp,pc}
 E(ARM_TYPE_VOID)
-	pop	{fp,pc}
+	ldmia	sp!, {fp,pc}
 	nop
 E(ARM_TYPE_STRUCT)
-	pop	{fp,pc}
+	ldmia	sp!, {fp,pc}
 
 	cfi_endproc
 	UNWIND(.fnend)
@@ -287,6 +305,7 @@ ARM_FUNC_END(ffi_go_closure_VFP)
 ARM_FUNC_START(ffi_closure_VFP)
 	UNWIND(.fnstart)
 	cfi_startproc
+#ifdef HAVE_ARM_VFP
 #ifdef _WIN32
 	ldmfd	sp!, {r0, ip}			@ restore fp (r0 is used for stack alignment)
 #endif
@@ -323,6 +342,9 @@ ARM_FUNC_START(ffi_closure_VFP)
 	add	r3, r3, r0, lsl #3
 	mov	pc, r3
 #endif
+#else
+	bkpt #16
+#endif
 	cfi_endproc
 	UNWIND(.fnend)
 ARM_FUNC_END(ffi_closure_VFP)
@@ -336,6 +358,7 @@ ARM_FUNC_START_LOCAL(ffi_closure_ret)
 	cfi_rel_offset(sp, 0)
 	cfi_rel_offset(lr, 4)
 0:
+#ifdef HAVE_ARM_VFP
 E(ARM_TYPE_VFP_S)
 	ldc	p10, cr0, [r2]			@ vldr s0, [r2]
 	b	call_epilogue
@@ -345,6 +368,17 @@ E(ARM_TYPE_VFP_D)
 E(ARM_TYPE_VFP_N)
 	ldc	p11, cr0, [r2], {8}		@ vldm r2, {d0-d3}
 	b	call_epilogue
+#else
+E(ARM_TYPE_VFP_S)
+	bkpt #16
+	nop
+E(ARM_TYPE_VFP_D)
+	bkpt #16
+	nop
+E(ARM_TYPE_VFP_N)
+	bkpt #16
+	nop
+#endif
 E(ARM_TYPE_INT64)
 	ldr	r1, [r2, #4]
 	nop
@@ -358,9 +392,9 @@ E(ARM_TYPE_STRUCT)
 	b	call_epilogue
 call_epilogue:
 #ifndef __thumb__
-	ldm	sp, {sp,pc}
+	ldmia	sp, {sp,pc}
 #else
-	ldm	sp, {ip,lr}
+	ldmia	sp, {ip,lr}
 	mov	sp, ip
 	bx	lr
 #endif

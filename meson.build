@@ -313,6 +313,35 @@ if cc.compiles('asm (".cfi_sections\\n.cfi_startproc\\n.cfi_endproc");', name : 
   ffi_conf.set('HAVE_AS_CFI_PSEUDO_OP', 1)
 endif
 
+if host_cpu_family == 'arm'
+  if cc.compiles('asm (".syntax unified");', name : 'ASM modern psuedo-ops')
+    ffi_conf.set('HAVE_AS_MODERN_PSEUDO_OPS', 1)
+  endif
+
+  if cc.compiles('''asm (".text");
+                    #ifdef __clang__
+                    asm ("vldm r0, {d0-d7}");
+                    #else
+                    asm ("ldc p11, cr0, [r0], {16}");
+                    #endif''',
+                 name : 'VFP support')
+    ffi_conf.set('HAVE_ARM_VFP', 1)
+  endif
+
+  if host_system == 'linux' and not cc.compiles(
+        '''void
+           check (void * start,
+                  void * end)
+           {
+             __clear_cache (start, end);
+           }
+           ''' + '\n',
+        args : ['-Wall', '-Werror'],
+        name : 'toolchain supports __clear_cache()')
+    ffi_conf.set('HAVE_OLD_LINUX_TOOLCHAIN', 1)
+  endif
+endif
+
 if target == 'SPARC'
   if cc.links('asm (".text; foo: nop; .data; .align 4; .byte 0; .uaword %r_disp32(foo); .text");',
               args: ['-fpic', '-shared'],

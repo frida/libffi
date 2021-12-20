@@ -61,6 +61,13 @@ extern unsigned char ffi_arm_trampoline[12] FFI_HIDDEN;
 #endif
 #endif
 
+#ifdef HAVE_OLD_LINUX_TOOLCHAIN
+#include <unistd.h>
+#include <sys/syscall.h>
+#define __clear_cache(start, end) \
+	syscall (__ARM_NR_cacheflush, start, end, 0)
+#endif
+
 #if defined(__FreeBSD__) && defined(__arm__)
 #include <sys/types.h>
 #include <machine/sysarch.h>
