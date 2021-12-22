@@ -159,7 +159,7 @@ ARM_FUNC_START(ffi_call_SYSV)
 	mov	fp, r1
 
 	@ This is a bit of a lie wrt the origin of the unwind info, but
-	@ now we've got the usual frame pointer and two saved registers.
+	@ now we have got the usual frame pointer and two saved registers.
 	UNWIND(.save {fp,lr})
 	UNWIND(.setfp fp, sp)
 	cfi_def_cfa(fp, 8)
