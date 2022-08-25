@@ -44,6 +44,8 @@
 
 #if FFI_EXEC_TRAMPOLINE_TABLE
 
+#include "trampoline_table.h"
+
 #ifdef __MACH__
 #include <mach/machine/vm_param.h>
 #endif
@@ -639,7 +641,9 @@ ffi_prep_closure_loc (ffi_closure * closure,
     return FFI_BAD_ABI;
 
 #if FFI_EXEC_TRAMPOLINE_TABLE
-  void **config = (void **)((uint8_t *)codeloc - PAGE_MAX_SIZE);
+  ffi_trampoline_table *table = closure->trampoline_table;
+  void **config = (void **)((uint8_t *)codeloc - PAGE_MAX_SIZE -
+      table->page_segment_offset);
   config[0] = closure;
   config[1] = closure_func;
 #else

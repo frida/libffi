@@ -180,38 +180,15 @@ ffi_tramp_is_present (__attribute__((unused)) void *ptr)
 
 #ifdef __MACH__
 
-#include <mach/mach.h>
+#include "trampoline_table.h"
+
+#include <dlfcn.h>
 #include <pthread.h>
 #ifdef HAVE_ARM64E_PTRAUTH
 #include <ptrauth.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>
-
-extern void *ffi_closure_trampoline_table_page;
-
-typedef struct ffi_trampoline_table ffi_trampoline_table;
-typedef struct ffi_trampoline_table_entry ffi_trampoline_table_entry;
-
-struct ffi_trampoline_table
-{
-  /* contiguous writable and executable pages */
-  vm_address_t config_page;
-
-  /* free list tracking */
-  uint16_t free_count;
-  ffi_trampoline_table_entry *free_list;
-  ffi_trampoline_table_entry *free_list_pool;
-
-  ffi_trampoline_table *prev;
-  ffi_trampoline_table *next;
-};
-
-struct ffi_trampoline_table_entry
-{
-  void *(*trampoline) (void);
-  ffi_trampoline_table_entry *next;
-};
 
 /* Total number of trampolines that fit in one trampoline table */
 #define FFI_TRAMPOLINE_COUNT (PAGE_MAX_SIZE / FFI_TRAMPOLINE_SIZE)
@@ -220,6 +197,10 @@ static void ffi_trampoline_table_free (ffi_trampoline_table *table);
 
 static pthread_mutex_t ffi_trampoline_lock = PTHREAD_MUTEX_INITIALIZER;
 static ffi_trampoline_table *ffi_trampoline_tables = NULL;
+static int ffi_trampoline_initialized = 0;
+static void *ffi_trampolines_dylib;
+static void *ffi_trampoline_table_page;
+static int ffi_trampoline_allocation_page_count;
 
 void
 ffi_deinit (void)
@@ -231,71 +212,136 @@ ffi_deinit (void)
       ffi_trampoline_table_free (table);
     }
 
+  ffi_trampoline_table_page = NULL;
+  ffi_trampoline_allocation_page_count = 0;
+
+  if (ffi_trampolines_dylib != NULL)
+    {
+      dlclose (ffi_trampolines_dylib);
+      ffi_trampolines_dylib = NULL;
+    }
+
   pthread_mutex_destroy (&ffi_trampoline_lock);
 }
 
 static ffi_trampoline_table *
 ffi_trampoline_table_alloc (void)
 {
+  int allocation_page_count;
+  vm_size_t allocation_size;
+  int page_segment_offset;
   ffi_trampoline_table *table;
   vm_address_t config_page;
   vm_address_t trampoline_page;
   vm_address_t trampoline_page_template;
+  vm_address_t trampoline_segment_template;
+  vm_size_t trampoline_segment_size;
+  vm_address_t trampoline_segment;
   vm_prot_t cur_prot;
   vm_prot_t max_prot;
   kern_return_t kt;
   uint16_t i;
 
-  /* Allocate two pages -- a config page and a placeholder page */
+  if (!ffi_trampoline_initialized)
+    {
+      ffi_trampolines_dylib = dlopen ("/usr/lib/libffi-trampolines.dylib",
+				      RTLD_NOW | RTLD_LOCAL | RTLD_FIRST);
+
+      if (ffi_trampolines_dylib != NULL)
+	{
+	  ffi_trampoline_table_page = dlsym (ffi_trampolines_dylib,
+					     "ffi_closure_trampoline_table_page");
+	}
+      else
+	{
+#ifdef HAVE_ARM64E_PTRAUTH
+	  ffi_trampoline_table_page =
+	      ptrauth_sign_unauthenticated (&ffi_closure_trampoline_table_page,
+					    ptrauth_key_function_pointer, 0);
+#else
+	  ffi_trampoline_table_page = &ffi_closure_trampoline_table_page;
+#endif
+	}
+
+      ffi_trampoline_allocation_page_count =
+	  (ffi_trampolines_dylib != NULL) ? 3 : 2;
+
+      ffi_trampoline_initialized = 1;
+    }
+
+  allocation_page_count = ffi_trampoline_allocation_page_count;
+  allocation_size = allocation_page_count * PAGE_MAX_SIZE;
+  page_segment_offset = (ffi_trampolines_dylib != NULL) ? PAGE_MAX_SIZE : 0;
+
+  /* The entire allocation is:
+   *    config_page
+   *    trampoline_segment
+   *
+   * trampoline_segment is:
+   *    trampoline dylib mach-o header (if libffi-trampolines.dylib is present)
+   *    trampoline page
+   */
   config_page = 0x0;
-  kt = vm_allocate (mach_task_self (), &config_page, PAGE_MAX_SIZE * 2,
+  kt = vm_allocate (mach_task_self (), &config_page, allocation_size,
 		    VM_FLAGS_ANYWHERE);
   if (kt != KERN_SUCCESS)
     return NULL;
 
   /* Remap the trampoline table on top of the placeholder page */
-  trampoline_page = config_page + PAGE_MAX_SIZE;
-
 #ifdef HAVE_ARM64E_PTRAUTH
-  trampoline_page_template = (vm_address_t)(uintptr_t)ptrauth_auth_data((void *)&ffi_closure_trampoline_table_page, ptrauth_key_function_pointer, 0);
+  trampoline_page_template = (uintptr_t)
+      ptrauth_auth_data (ffi_trampoline_table_page,
+			 ptrauth_key_function_pointer, 0);
 #else
-  trampoline_page_template = (vm_address_t)&ffi_closure_trampoline_table_page;
+  trampoline_page_template = (uintptr_t) ffi_trampoline_table_page;
 #endif
 
 #ifdef __arm__
   /* ffi_closure_trampoline_table_page can be thumb-biased on some ARM archs */
   trampoline_page_template &= ~1UL;
 #endif
-  kt = vm_remap (mach_task_self (), &trampoline_page, PAGE_MAX_SIZE, 0x0,
-		 VM_FLAGS_OVERWRITE, mach_task_self (), trampoline_page_template,
-		 FALSE, &cur_prot, &max_prot, VM_INHERIT_SHARE);
+
+  trampoline_segment_template = trampoline_page_template - page_segment_offset;
+  trampoline_segment_size = allocation_size - PAGE_MAX_SIZE;
+
+  /* Remap the trampoline table on top of the placeholder page */
+  trampoline_segment = config_page + PAGE_MAX_SIZE;
+  kt = vm_remap (mach_task_self (), &trampoline_segment,
+		 trampoline_segment_size, 0x0,
+		 VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, mach_task_self (),
+		 trampoline_segment_template, FALSE, &cur_prot, &max_prot,
+		 VM_INHERIT_SHARE);
   if (kt != KERN_SUCCESS)
     {
-      vm_deallocate (mach_task_self (), config_page, PAGE_MAX_SIZE * 2);
+      vm_deallocate (mach_task_self (), config_page, allocation_size);
       return NULL;
     }
 
   if (!(cur_prot & VM_PROT_EXECUTE))
     {
       /* If VM_PROT_EXECUTE isn't set on the remapped trampoline page, set it */
-      kt = vm_protect (mach_task_self (), trampoline_page, PAGE_MAX_SIZE,
-         FALSE, cur_prot | VM_PROT_EXECUTE);
+      kt = vm_protect (mach_task_self (), trampoline_segment,
+                       trampoline_segment_size, FALSE,
+                       cur_prot | VM_PROT_EXECUTE);
       if (kt != KERN_SUCCESS)
         {
-          vm_deallocate (mach_task_self (), config_page, PAGE_MAX_SIZE * 2);
+          vm_deallocate (mach_task_self (), config_page, allocation_size);
           return NULL;
         }
     }
 
-  mem_callbacks.on_allocate ((void *) config_page, PAGE_MAX_SIZE * 2);
+  mem_callbacks.on_allocate ((void *) config_page, allocation_size);
+
+  trampoline_page = trampoline_segment + page_segment_offset;
 
   /* We have valid trampoline and config pages */
   table = mem_callbacks.calloc (1, sizeof (ffi_trampoline_table));
   if (table == NULL)
     {
-      vm_deallocate (mach_task_self (), config_page, PAGE_MAX_SIZE * 2);
+      vm_deallocate (mach_task_self (), config_page, allocation_size);
       return NULL;
     }
+  table->page_segment_offset = page_segment_offset;
   table->free_count = FFI_TRAMPOLINE_COUNT;
   table->config_page = config_page;
 
@@ -304,7 +350,7 @@ ffi_trampoline_table_alloc (void)
     mem_callbacks.calloc (FFI_TRAMPOLINE_COUNT, sizeof (ffi_trampoline_table_entry));
   if (table->free_list_pool == NULL)
     {
-      vm_deallocate (mach_task_self (), config_page, PAGE_MAX_SIZE * 2);
+      vm_deallocate (mach_task_self (), config_page, allocation_size);
       mem_callbacks.free (table);
       return NULL;
     }
@@ -330,6 +376,9 @@ ffi_trampoline_table_alloc (void)
 static void
 ffi_trampoline_table_free (ffi_trampoline_table *table)
 {
+  const vm_size_t allocation_size =
+      ffi_trampoline_allocation_page_count * PAGE_MAX_SIZE;
+
   /* Remove from the list */
   if (table->prev != NULL)
     table->prev->next = table->next;
@@ -338,8 +387,8 @@ ffi_trampoline_table_free (ffi_trampoline_table *table)
     table->next->prev = table->prev;
 
   /* Deallocate pages */
-  vm_deallocate (mach_task_self (), table->config_page, PAGE_MAX_SIZE * 2);
-  mem_callbacks.on_deallocate ((void *) table->config_page, PAGE_MAX_SIZE * 2);
+  vm_deallocate (mach_task_self (), table->config_page, allocation_size);
+  mem_callbacks.on_deallocate ((void *) table->config_page, allocation_size);
 
   /* Deallocate free list */
   mem_callbacks.free (table->free_list_pool);

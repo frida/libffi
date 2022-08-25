@@ -63,6 +63,8 @@ struct call_context
 
 #if FFI_EXEC_TRAMPOLINE_TABLE
 
+#include "trampoline_table.h"
+
 #ifdef __MACH__
 #ifdef HAVE_ARM64E_PTRAUTH
 #include <ptrauth.h>
@@ -1041,7 +1043,9 @@ ffi_prep_closure_loc (ffi_closure *closure,
 #  ifdef HAVE_ARM64E_PTRAUTH
   codeloc = ptrauth_auth_data(codeloc, ptrauth_key_function_pointer, 0);
 #  endif
-  void **config = (void **)((uint8_t *)codeloc - PAGE_MAX_SIZE);
+  ffi_trampoline_table *table = closure->trampoline_table;
+  void **config = (void **)((uint8_t *)codeloc - PAGE_MAX_SIZE -
+      table->page_segment_offset);
   config[0] = closure;
   config[1] = start;
 # endif
