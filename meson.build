@@ -400,7 +400,10 @@ subdir('include')
 # Configure ffi_conf some more and declare libffi.so
 subdir('src')
 
-# TODO: Install texinfo files
+if get_option('doc')
+  subdir('doc')
+endif
+
 install_man([
   'man/ffi.3',
   'man/ffi_call.3',

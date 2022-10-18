@@ -13,3 +13,5 @@ option('pax_emutramp', type : 'boolean', value : false)
 option('ffi-build-versioned', type : 'boolean', value : true)
 # Toggle this to disable use of static exec trampolines
 option('exe_static_tramp', type : 'boolean', value : true)
+# Toggle to build documentation (needs makeinfo)
+option('doc', type : 'boolean', value : false)
