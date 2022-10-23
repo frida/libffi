@@ -3,6 +3,8 @@ project('libffi', 'c', version : '3.4.4',
         default_options : ['buildtype=debugoptimized',
                            'warning_level=1'])
 
+fs = import('fs')
+
 # NOTE: host = "cross" or "target"
 host_cpu_family = host_machine.cpu_family()
 host_system = host_machine.system()
@@ -344,6 +346,11 @@ if target == 'X86_64'
   endif
 endif
 
+if host_system == 'windows' and is_gnu_like
+  # so printf supports long double under mingw-w64 (used in cls_longdouble_va)
+  add_project_arguments('-D__USE_MINGW_ANSI_STDIO=1', language: 'c')
+endif
+
 if is_gnu_like
   no_lto = cc.get_supported_arguments('-fno-lto')
   t = 'meson-scripts/test-ro-eh-frame.py'
@@ -402,6 +409,10 @@ subdir('src')
 
 if get_option('doc')
   subdir('doc')
+endif
+
+if get_option('tests')
+  subdir('testsuite')
 endif
 
 install_man([

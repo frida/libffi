@@ -15,3 +15,6 @@ option('ffi-build-versioned', type : 'boolean', value : true)
 option('exe_static_tramp', type : 'boolean', value : true)
 # Toggle to build documentation (needs makeinfo)
 option('doc', type : 'boolean', value : false)
+# Toggle this if you don't want to run testsuite
+option('tests', type : 'boolean', value : true)
+option('tests_optimizations', type : 'array', value : [])
