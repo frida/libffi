@@ -8,9 +8,6 @@ fs = import('fs')
 # NOTE: host = "cross" or "target"
 host_cpu_family = host_machine.cpu_family()
 host_system = host_machine.system()
-message('host cpu: ' + host_machine.cpu())
-message('host cpu_family: ' + host_cpu_family)
-message('host system: ' + host_system)
 
 cc = meson.get_compiler('c')
 is_msvc_like = cc.get_argument_syntax() == 'msvc'
@@ -420,3 +417,12 @@ install_man([
   'man/ffi_call.3',
   'man/ffi_prep_cif.3',
   'man/ffi_prep_cif_var.3'])
+
+summary({
+  'Host CPU': host_machine.cpu(),
+  'Host CPU family': host_cpu_family,
+  'Host system': host_system,
+  'Target': target,
+  'ASM sources': asm_sources,
+  'C sources': c_sources,
+})
