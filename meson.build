@@ -5,6 +5,16 @@ project('libffi', 'c', version : '3.4.4',
 
 fs = import('fs')
 
+libtool_version = run_command('meson-scripts/extract-libtool-version.py',
+  meson.current_source_dir() / 'libtool-version',
+  check: true).stdout().split(':')
+current = libtool_version[0].to_int()
+revision = libtool_version[1].to_int()
+age = libtool_version[2].to_int()
+ffi_version = '@0@.@1@.@2@'.format(current - age, age, revision)
+ffi_soversion = '@0@'.format(current - age)
+ffi_darwin_versions = '@0@'.format(current + 1)
+
 # NOTE: host = "cross" or "target"
 host_cpu_family = host_machine.cpu_family()
 host_system = host_machine.system()
