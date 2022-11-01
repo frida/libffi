@@ -276,9 +276,9 @@ foreach suite, sources : tests
     if suite == 'bhaible'
       suite_c_args += ['-wd4996', '-wd4116', '-wd4101', '-wd4244']
     elif suite == 'call'
-      suite_c_args += ['-wd4005', '-wd4244', '-wd4305', '-wd4477', 'wd4312', '-wd4311', '-EHsc']
+      suite_c_args += ['-wd4005', '-wd4244', '-wd4305', '-wd4477', '-wd4312', '-wd4311', '-EHsc']
     elif suite == 'closure'
-      suite_c_args += ['-wd4005', '-wd4244', '-wd4305', '-wd4477', 'wd4312', '-wd4311', '-EHsc']
+      suite_c_args += ['-wd4005', '-wd4244', '-wd4305', '-wd4477', '-wd4312', '-wd4311', '-EHsc']
     endif
   elif cc.get_id() == 'gcc'
     if suite == 'bhaible'
