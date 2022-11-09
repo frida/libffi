@@ -74,6 +74,7 @@ endforeach
 # Default values
 c_sources = ['ffi.c']
 asm_sources = ['sysv.S']
+masm_args = []
 targetdir = ''
 have_long_double = ''
 have_long_double_variant = false
@@ -136,6 +137,7 @@ elif (host_cpu_family == 'x86' and host_system in ['cygwin', 'windows', 'os2', '
     target = 'X86_WIN32'
     if is_msvc_like
       asm_sources = ['sysv_intel.S']
+      masm_args += '/safeseh'
     endif
   else
     target = 'X86_WIN64'
