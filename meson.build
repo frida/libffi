@@ -343,7 +343,7 @@ endif
 if host_cpu_family in ['arm', 'aarch64'] and host_system == 'darwin'
   message('Cannot use PROT_EXEC on this target, using fallback')
   ffi_conf.set('FFI_EXEC_TRAMPOLINE_TABLE', 1)
-elif host_system in ['android', 'darwin', 'openbsd', 'freebsd', 'solaris']
+elif host_system in ['android', 'darwin', 'openbsd', 'freebsd', 'solaris', 'qnx']
   message('Cannot use malloc on this target, using fallback')
   ffi_conf.set('FFI_MMAP_EXEC_WRIT', 1)
 endif
