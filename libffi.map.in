@@ -41,6 +41,9 @@ LIBFFI_BASE_8.0 {
 	ffi_java_raw_size;
 
 	ffi_get_struct_offsets;
+
+	ffi_deinit;
+	ffi_set_mem_callbacks;
   local:
 	*;
 };

@@ -570,7 +570,10 @@ typedef struct {
   void  (*on_deallocate)(void*,size_t);
 } ffi_mem_callbacks;
 
+FFI_API
 void ffi_deinit (void);
+
+FFI_API
 void ffi_set_mem_callbacks (const ffi_mem_callbacks *callbacks);
 
 /* Convert between closure and function pointers.  */
