@@ -885,45 +885,12 @@ ENDF(C(ffi_closure_raw_THISCALL))
 
 #endif /* !FFI_NO_RAW_API */
 
-#ifdef X86_DARWIN
-/* The linker in use on earlier Darwin needs weak definitions to be
-   placed in a coalesced section.  That section should not be called
-   __TEXT,__text since that would be re-defining the attributes of the
-   .text section (which is an error for earlier tools). Here we use
-   '__textcoal_nt' which is what GCC emits for this.
-   Later linker versions are happy to use a normal section and, after
-   Darwin12 / OSX 10.8, the tools warn that using coalesced sections
-   for this is deprecated so we must switch to avoid build fails and/or
-   deprecation warnings.  */
-# if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) &&		\
-   __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1080
-#  define COMDAT(X)							\
-        .section __TEXT,__textcoal_nt,coalesced,pure_instructions;	\
-        .weak_definition X;						\
-        FFI_HIDDEN(X)
-# else
-#  define COMDAT(X)							\
-        .text;								\
-        .weak_definition X;						\
-        FFI_HIDDEN(X)
-# endif
-#elif defined __ELF__ && !(defined(__sun__) && defined(__svr4__))
-# define COMDAT(X)							\
-	.section .text.X,"axG",@progbits,X,comdat;			\
-	.globl	X;							\
-	FFI_HIDDEN(X)
-#else
-# define COMDAT(X)
-#endif
-
 #if defined(__PIC__)
-	COMDAT(C(__x86.get_pc_thunk.bx))
 C(__x86.get_pc_thunk.bx):
 	movl	(%esp), %ebx
 	ret
 ENDF(C(__x86.get_pc_thunk.bx))
 # if defined X86_DARWIN || defined HAVE_HIDDEN_VISIBILITY_ATTRIBUTE
-	COMDAT(C(__x86.get_pc_thunk.dx))
 C(__x86.get_pc_thunk.dx):
 	movl	(%esp), %edx
 	ret
