@@ -217,7 +217,7 @@ elif host_cpu_family.startswith('nios2') and host_system == 'linux'
   target = 'NIOS2'
 elif host_cpu_family.startswith('or1k')
   target = 'OR1K'
-elif (host_cpu_family.startswith('powerpc') and \
+elif (host_cpu_family.startswith('ppc') and \
       host_system in ['linux', 'sysv', 'amigaos', 'eabi', 'beos', 'rtems']) or \
      (host_cpu_family in ['powerpc64', 'powerpc64le'] and host_system == 'freebsd')
   target = 'POWERPC'
