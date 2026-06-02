@@ -1122,26 +1122,55 @@ ffi_closure_alloc (size_t size, void **code)
     return NULL;
 
   c = mem_callbacks.malloc (size);
+  if (c == NULL)
+    return NULL;
+
   *code = FFI_FN (c);
+#if defined(FFI_EXEC_STATIC_TRAMP)
+  if (ffi_tramp_is_supported ())
+    {
+      void *ftramp = ffi_tramp_alloc (0);
+      if (ftramp == NULL)
+        {
+          mem_callbacks.free (c);
+          return NULL;
+        }
+      *code = ffi_tramp_get_addr (ftramp);
+      ((ffi_closure *) c)->ftramp = ftramp;
+    }
+#endif
+
   return c;
 }
 
 void
 ffi_closure_free (void *ptr)
 {
+#if defined(FFI_EXEC_STATIC_TRAMP)
+  if (ffi_tramp_is_supported ())
+    ffi_tramp_free (((ffi_closure *) ptr)->ftramp);
+#endif
   mem_callbacks.free (ptr);
 }
 
 void *
 ffi_data_to_code_pointer (void *data)
 {
+#if defined(FFI_EXEC_STATIC_TRAMP)
+  if (ffi_tramp_is_supported ())
+    return ffi_tramp_get_addr (((ffi_closure *) data)->ftramp);
+#endif
   return data;
 }
 
 int
 ffi_tramp_is_present (__attribute__((unused)) void *ptr)
 {
+#if defined(FFI_EXEC_STATIC_TRAMP)
+  return ffi_tramp_is_supported ();
+#else
   return 0;
+#endif
 }
 
 # endif /* ! FFI_MMAP_EXEC_WRIT */
