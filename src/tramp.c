@@ -54,6 +54,11 @@
 #ifdef __CYGWIN__
 #include <limits.h>
 #endif
+#elif defined (FFI_TRAMP_EMBEDDER)
+#include <stddef.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <tramp.h>
 #endif
 
 /*
@@ -288,6 +293,14 @@ ffi_tramp_init_os (void)
   return ffi_tramp_get_temp_file ();
 }
 
+#elif defined (FFI_TRAMP_EMBEDDER)
+
+static int
+ffi_tramp_init_os (void)
+{
+  return 1;
+}
+
 #endif /* defined (__linux__) || defined (__CYGWIN__) */
 
 /* --------------------------- OS-specific Locking -------------------------*/
@@ -306,6 +319,18 @@ static void
 ffi_tramp_unlock()
 {
   pthread_mutex_unlock (&tramp_globals_mutex);
+}
+
+#elif defined (FFI_TRAMP_EMBEDDER)
+
+static void
+ffi_tramp_lock (void)
+{
+}
+
+static void
+ffi_tramp_unlock (void)
+{
 }
 
 #endif /* defined (__linux__) || defined (__CYGWIN__) */
@@ -362,6 +387,47 @@ tramp_table_unmap (struct tramp_table *table)
 {
   (void) munmap (table->code_table, tramp_globals.map_size);
   (void) munmap (table->parm_table, tramp_globals.map_size);
+}
+
+#elif defined (FFI_TRAMP_EMBEDDER)
+
+/*
+ * Supplied by the embedder. Produce an executable code table holding a copy of
+ * `text` and a writable parameter table immediately following it (the two must
+ * be `map_size` apart for the trampolines' PC-relative parameter access).
+ * Returns 0 on failure, which makes static trampolines report "not supported".
+ */
+int __attribute__ ((weak))
+ffi_tramp_embedder_map (const void *text, size_t map_size, void **code_table,
+  void **parm_table)
+{
+  (void) text;
+  (void) map_size;
+  (void) code_table;
+  (void) parm_table;
+  return 0;
+}
+
+void __attribute__ ((weak))
+ffi_tramp_embedder_unmap (void *code_table, void *parm_table, size_t map_size)
+{
+  (void) code_table;
+  (void) parm_table;
+  (void) map_size;
+}
+
+static int
+tramp_table_map (struct tramp_table *table)
+{
+  return ffi_tramp_embedder_map (tramp_globals.text, tramp_globals.map_size,
+    &table->code_table, &table->parm_table);
+}
+
+static void
+tramp_table_unmap (struct tramp_table *table)
+{
+  ffi_tramp_embedder_unmap (table->code_table, table->parm_table,
+    tramp_globals.map_size);
 }
 
 #endif /* defined (__linux__) || defined (__CYGWIN__) */

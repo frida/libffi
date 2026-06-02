@@ -434,6 +434,12 @@ if get_option('exe_static_tramp')
     endif
   elif host_system == 'linux' and host_cpu_family in ['arm', 'aarch64', 'x86', 'x86_64', 'loongarch']
     ffi_conf.set('FFI_EXEC_STATIC_TRAMP', 1)
+  elif host_system == 'none'
+    # Bare metal: the embedder supplies the executable mapping for the
+    # trampoline table. Architectures without a static trampoline implementation
+    # fall back gracefully via the weak ffi_tramp_arch at runtime.
+    ffi_conf.set('FFI_EXEC_STATIC_TRAMP', 1)
+    ffi_conf.set('FFI_TRAMP_EMBEDDER', 1)
   endif
 endif
 if get_option('purify_safety')

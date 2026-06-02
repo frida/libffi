@@ -15,6 +15,10 @@
 /* Define this if you want statically defined trampolines */
 #mesondefine FFI_EXEC_STATIC_TRAMP
 
+/* Define this if the embedder supplies the trampoline table's executable
+   mapping (freestanding / bare-metal hosts). */
+#mesondefine FFI_TRAMP_EMBEDDER
+
 /* Cannot use PROT_EXEC on this target, so, we revert to alternative means */
 #mesondefine FFI_EXEC_TRAMPOLINE_TABLE
 
