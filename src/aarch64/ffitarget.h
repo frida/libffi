@@ -83,11 +83,10 @@ typedef enum ffi_abi
 
 #if defined (__APPLE__)
 #define FFI_EXTRA_CIF_FIELDS unsigned aarch64_nfixedargs
-#elif !defined(_WIN32)
-/* iOS and Windows reserve x18 for the system.  Disable Go closures until
-   a new static chain is chosen.  */
-#define FFI_GO_CLOSURES 1
 #endif
+
+/* Go closures put their static chain in x18, which aarch64 platforms reserve,
+   and ffi_call_SYSV installs it for every callee.  Nothing here needs them.  */
 
 #ifndef _WIN32
 /* No complex type on Windows */
