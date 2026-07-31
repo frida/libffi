@@ -26,6 +26,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.  */
 #include <ffi_cfi.h>
 #include "internal.h"
 
+/* The vector paths are inert on a soft-float build, but still have to assemble.  */
+	.arch_extension fp
+	.arch_extension simd
+
 #ifdef HAVE_MACHINE_ASM_H
 #include <machine/asm.h>
 #else
