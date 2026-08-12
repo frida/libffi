@@ -201,13 +201,21 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
 	  FFI_ASSERT (0);
       }
     case FFI_TYPE_FLOAT:
+#ifdef FFI_X86_64_SOFT_FLOAT
+      classes[0] = X86_64_INTEGERSI_CLASS;
+#else
       if (!(byte_offset % 8))
 	classes[0] = X86_64_SSESF_CLASS;
       else
 	classes[0] = X86_64_SSE_CLASS;
+#endif
       return 1;
     case FFI_TYPE_DOUBLE:
+#ifdef FFI_X86_64_SOFT_FLOAT
+      classes[0] = X86_64_INTEGER_CLASS;
+#else
       classes[0] = X86_64_SSEDF_CLASS;
+#endif
       return 1;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
     case FFI_TYPE_LONGDOUBLE:
@@ -449,10 +457,18 @@ ffi_prep_cif_machdep (ffi_cif *cif)
       flags = (sizeof(void *) == 4 ? UNIX64_RET_UINT32 : UNIX64_RET_INT64);
       break;
     case FFI_TYPE_FLOAT:
+#ifdef FFI_X86_64_SOFT_FLOAT
+      flags = UNIX64_RET_UINT32;
+#else
       flags = UNIX64_RET_XMM32;
+#endif
       break;
     case FFI_TYPE_DOUBLE:
+#ifdef FFI_X86_64_SOFT_FLOAT
+      flags = UNIX64_RET_INT64;
+#else
       flags = UNIX64_RET_XMM64;
+#endif
       break;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
     case FFI_TYPE_LONGDOUBLE:
