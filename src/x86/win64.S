@@ -27,7 +27,10 @@
    actual table.  The entry points into the table are all 8 bytes.
    The use of ORG asserts that we're at the correct location.  */
 /* ??? The clang assembler doesn't handle .org with symbolic expressions.  */
-#if defined(__clang__) || defined(__APPLE__) || (defined (__sun__) && defined(__svr4__))
+#ifdef __CET__
+/* Double slot size to 16 byte to add 4 bytes of ENDBR64.  */
+# define E(BASE, X)	.balign 8; .org BASE + (X) * 16
+#elif defined(__clang__) || defined(__APPLE__) || (defined (__sun__) && defined(__svr4__))
 # define E(BASE, X)	.balign 8
 #else
 # define E(BASE, X)	.balign 8; .org BASE + (X) * 8
@@ -79,9 +82,14 @@ C(ffi_call_win64):
 	movq	32(%rbp), %r8
 	leaq	0f(%rip), %r10
 	cmpl	$FFI_TYPE_SMALL_STRUCT_4B, %ecx
-	leaq	(%r10, %rcx, 8), %r10
 	ja	99f
-	_CET_NOTRACK jmp *%r10
+#ifdef __CET__
+	/* NB: Originally, each slot is 8 byte.  4 bytes of ENDBR64 +
+	   4 bytes NOP padding double slot size to 16 bytes.  */
+	addl	%ecx, %ecx
+#endif
+	leaq	(%r10, %rcx, 8), %r10
+	jmp	*%r10
 
 /* Below, we're space constrained most of the time.  Thus we eschew the
    modern "mov, pop, ret" sequence (5 bytes) for "leave, ret" (2 bytes).  */
@@ -96,62 +104,81 @@ C(ffi_call_win64):
 	.align	8
 0:
 E(0b, FFI_TYPE_VOID)
+	_CET_ENDBR
 	epilogue
 E(0b, FFI_TYPE_INT)
+	_CET_ENDBR
 	movslq	%eax, %rax
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_FLOAT)
+	_CET_ENDBR
 	movss	%xmm0, (%r8)
 	epilogue
 E(0b, FFI_TYPE_DOUBLE)
+	_CET_ENDBR
 	movsd	%xmm0, (%r8)
 	epilogue
 // FFI_TYPE_LONGDOUBLE may be FFI_TYPE_DOUBLE but we need a different value here.
 E(0b, FFI_TYPE_DOUBLE + 1)
+	_CET_ENDBR
 	call	PLT(C(abort))
 E(0b, FFI_TYPE_UINT8)
+	_CET_ENDBR
 	movzbl	%al, %eax
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_SINT8)
+	_CET_ENDBR
 	movsbq	%al, %rax
 	jmp	98f
 E(0b, FFI_TYPE_UINT16)
+	_CET_ENDBR
 	movzwl	%ax, %eax
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_SINT16)
+	_CET_ENDBR
 	movswq	%ax, %rax
 	jmp	98f
 E(0b, FFI_TYPE_UINT32)
+	_CET_ENDBR
 	movl	%eax, %eax
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_SINT32)
+	_CET_ENDBR
 	movslq	%eax, %rax
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_UINT64)
+	_CET_ENDBR
 98:	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_SINT64)
+	_CET_ENDBR
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_STRUCT)
+	_CET_ENDBR
 	epilogue
 E(0b, FFI_TYPE_POINTER)
+	_CET_ENDBR
 	movq	%rax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_COMPLEX)
+	_CET_ENDBR
 	call	PLT(C(abort))
 E(0b, FFI_TYPE_SMALL_STRUCT_1B)
+	_CET_ENDBR
 	movb	%al, (%r8)
 	epilogue
 E(0b, FFI_TYPE_SMALL_STRUCT_2B)
+	_CET_ENDBR
 	movw	%ax, (%r8)
 	epilogue
 E(0b, FFI_TYPE_SMALL_STRUCT_4B)
+	_CET_ENDBR
 	movl	%eax, (%r8)
 	epilogue
 
