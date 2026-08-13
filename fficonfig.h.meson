@@ -6,6 +6,9 @@
 /* Define if targeting an ARM processor that may have VFP support. */
 #mesondefine HAVE_ARM_VFP
 
+/* Define if targeting an x86 processor whose x87 FPU may be used. */
+#mesondefine HAVE_X87
+
 /* Define to the flags needed for the .section .eh_frame directive. */
 #mesondefine EH_FRAME_FLAGS
 
