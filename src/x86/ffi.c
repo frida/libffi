@@ -86,10 +86,18 @@ ffi_prep_cif_machdep(ffi_cif *cif)
       flags = X86_RET_VOID;
       break;
     case FFI_TYPE_FLOAT:
+#ifdef FFI_X86_SOFT_FLOAT
+      flags = X86_RET_INT32;
+#else
       flags = X86_RET_FLOAT;
+#endif
       break;
     case FFI_TYPE_DOUBLE:
+#ifdef FFI_X86_SOFT_FLOAT
+      flags = X86_RET_INT64;
+#else
       flags = X86_RET_DOUBLE;
+#endif
       break;
     case FFI_TYPE_LONGDOUBLE:
       flags = X86_RET_LDOUBLE;

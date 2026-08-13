@@ -174,6 +174,12 @@ elif host_cpu_family in ['x86', 'x86_64']
       asm_sources = ['unix64.S', 'win64.S']
     else
       target = 'X86'
+      have_x87 = is_msvc_like or cc.compiles(
+          'double f (double a) { __asm__ ("frndint" : "+t" (a)); return a; }',
+          name : 'x87 support')
+      if have_x87
+        ffi_conf.set('HAVE_X87', 1)
+      endif
       if is_msvc_like
         asm_sources = ['sysv_intel.S']
       endif
