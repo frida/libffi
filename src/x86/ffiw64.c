@@ -307,7 +307,13 @@ struct win64_closure_frame
    this is a nop.  When compiling on unix, this simplifies the assembly,
    and places the burden of saving the extra call-saved registers on
    the compiler.  */
-int FFI_HIDDEN __attribute__((ms_abi))
+#ifdef __PROSPERO__
+# define FFI_MS_ABI
+#else
+# define FFI_MS_ABI __attribute__((ms_abi))
+#endif
+
+int FFI_HIDDEN FFI_MS_ABI
 ffi_closure_win64_inner(ffi_cif *cif,
 			void (*fun)(ffi_cif*, void*, void**, void*),
 			void *user_data,
