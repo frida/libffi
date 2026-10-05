@@ -4,6 +4,7 @@
    Copyright (C) 1998 Geoffrey Keating
    Copyright (C) 2001 John Hornkvist
    Copyright (C) 2002, 2006, 2007, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2026 Anthony Green
 
    FFI support for Darwin and AIX.
    
@@ -31,6 +32,42 @@
 #include <ffi_common.h>
 
 #include <stdlib.h>
+
+
+struct ffi_aix_trampoline_struct {
+    void * code_pointer;	/* Pointer to ffi_closure_ASM */
+    void * toc;			/* TOC */
+    void * static_chain;	/* Pointer to closure */
+};
+
+/* Closure jump table indexes returned by ffi_closure_helper_common and
+   consumed by the jump tables in aix_closure.S.  These mirror the
+   definitions in ffi_powerpc.h, which this file cannot include because
+   it defines its own (differing) FLAG_* and ffi_dblfl.  */
+#define PPC_LD_NONE		0
+#define PPC_LD_R3		1
+#define PPC_LD_R3R4		2
+#define PPC_LD_F32		3
+#define PPC_LD_F64		4
+#define PPC_LD_F128		5
+#define PPC_LD_U8		6
+#define PPC_LD_S8		7
+#define PPC_LD_U16		8
+#define PPC_LD_S16		9
+
+#ifndef POWERPC64
+# define PPC_LD_U32		PPC_LD_R3
+# define PPC_LD_S32		PPC_LD_R3
+# define PPC_LD_PTR		PPC_LD_R3
+# define PPC_LD_I64		PPC_LD_R3R4
+# define PPC_LD_STRUCT		10
+#else
+# define PPC_LD_U32		10
+# define PPC_LD_S32		11
+# define PPC_LD_PTR		PPC_LD_R3
+# define PPC_LD_I64		PPC_LD_R3
+# define PPC_LD_STRUCT		12
+#endif
 
 extern void ffi_closure_ASM (void);
 
@@ -623,38 +660,50 @@ darwin_adjust_aggregate_sizes (ffi_type *s)
 }
 
 /* Adjust the size of S to be correct for AIX.
-   Word-align double unless it is the first member of a structure.  */
+   Word-align double unless it is the first member of a structure recursively.
+   Return non-zero if we found a recursive first member aggregate of interest. */
 
-static void
-aix_adjust_aggregate_sizes (ffi_type *s)
+static int
+aix_adjust_aggregate_sizes (ffi_type *s, int outer_most_type_or_first_member)
 {
-  int i;
+  int i, nested_first_member=0, final_align, rc=0;
 
   if (s->type != FFI_TYPE_STRUCT)
-    return;
+    return 0;
 
   s->size = 0;
   for (i = 0; s->elements[i] != NULL; i++)
     {
-      ffi_type *p;
+      ffi_type p;
       int align;
-      
-      p = s->elements[i];
-      aix_adjust_aggregate_sizes (p);
-      align = p->alignment;
-      if (i != 0 && p->type == FFI_TYPE_DOUBLE)
-	align = 4;
-      s->size = FFI_ALIGN(s->size, align) + p->size;
+
+      /* nested aggregates layout differently on AIX, so take a copy of the type */
+      p = *(s->elements[i]);
+      if (i == 0)
+        nested_first_member = aix_adjust_aggregate_sizes(&p, outer_most_type_or_first_member);
+      else
+        aix_adjust_aggregate_sizes(&p, 0);
+      align = p.alignment;
+      if (i != 0 && p.type == FFI_TYPE_DOUBLE)
+        align = 4;
+      s->size = FFI_ALIGN(s->size, align) + p.size;
     }
-  
-  s->size = FFI_ALIGN(s->size, s->alignment);
-  
-  if (s->elements[0]->type == FFI_TYPE_UINT64
-      || s->elements[0]->type == FFI_TYPE_SINT64
-      || s->elements[0]->type == FFI_TYPE_DOUBLE
-      || s->elements[0]->alignment == 8)
-    s->alignment = s->alignment > 8 ? s->alignment : 8;
-  /* Do not add additional tail padding.  */
+
+  final_align=s->alignment;
+  if ((s->elements[0]->type == FFI_TYPE_UINT64
+          || s->elements[0]->type == FFI_TYPE_SINT64
+          || s->elements[0]->type == FFI_TYPE_DOUBLE
+          || s->elements[0]->alignment == 8 || nested_first_member)) {
+      final_align = s->alignment > 8 ? s->alignment : 8;
+      rc=1;
+      /* still use the adjusted alignment to calculate tail padding, but don't adjust the types alignment if
+         we aren't in the recursive first position */
+      if (outer_most_type_or_first_member)
+        s->alignment=final_align;
+  }
+
+  s->size = FFI_ALIGN(s->size, final_align);
+  return rc;
 }
 
 /* Perform machine dependent cif processing.  */
@@ -682,9 +731,9 @@ ffi_prep_cif_machdep (ffi_cif *cif)
 
   if (cif->abi == FFI_AIX)
     {
-      aix_adjust_aggregate_sizes (cif->rtype);
+      aix_adjust_aggregate_sizes (cif->rtype, 1);
       for (i = 0; i < cif->nargs; i++)
-	aix_adjust_aggregate_sizes (cif->arg_types[i]);
+	aix_adjust_aggregate_sizes (cif->arg_types[i], 1);
     }
 
   /* Space for the frame pointer, callee's LR, CR, etc, and for
@@ -1173,12 +1222,12 @@ typedef union
   double d;
 } ffi_dblfl;
 
-ffi_type *
+int
 ffi_closure_helper_DARWIN (ffi_closure *, void *,
 			   unsigned long *, ffi_dblfl *);
 
 #if defined (FFI_GO_CLOSURES)
-ffi_type *
+int
 ffi_go_closure_helper_DARWIN (ffi_go_closure*, void *,
 			      unsigned long *, ffi_dblfl *);
 #endif
@@ -1190,7 +1239,7 @@ ffi_go_closure_helper_DARWIN (ffi_go_closure*, void *,
    up space for a return value, ffi_closure_ASM invokes the
    following helper function to do most of the work.  */
 
-static ffi_type *
+static int
 ffi_closure_helper_common (ffi_cif* cif,
 			   void (*fun)(ffi_cif*, void*, void**, void*),
 			   void *user_data, void *rvalue,
@@ -1213,6 +1262,13 @@ ffi_closure_helper_common (ffi_cif* cif,
   long             i, avn;
   ffi_dblfl *      end_pfr = pfr + NUM_FPR_ARG_REGISTERS;
   unsigned         size_al;
+  int              struct_ret_by_value = 0;
+  /* When a struct is returned by value, ffi_closure_ASM's jump-table
+     dispatch carries only a small integer return code (see PPC_LD_* above),
+     with no room for cif->rtype.  We hand cif->rtype back in the first
+     parameter-save slot -- which is dead by the time we return -- for the
+     PPC_LD_STRUCT fragment in darwin_closure.S to recover.  */
+  unsigned long *  pgr0 = pgr;
 #if defined(POWERPC_DARWIN64)
   unsigned 	   fpsused = 0;
 #endif
@@ -1228,12 +1284,16 @@ ffi_closure_helper_common (ffi_cif* cif,
 	  rvalue = (void *) *pgr;
 	  pgr++;
 	}
+      else
+	struct_ret_by_value = 1;
 #elif defined(DARWIN_PPC)
       if (cif->rtype->size > 4)
 	{
 	  rvalue = (void *) *pgr;
 	  pgr++;
 	}
+      else
+	struct_ret_by_value = 1;
 #else /* assume we return by ref.  */
       rvalue = (void *) *pgr;
       pgr++;
@@ -1430,10 +1490,53 @@ ffi_closure_helper_common (ffi_cif* cif,
   (fun) (cif, rvalue, avalue, user_data);
 
   /* Tell ffi_closure_ASM to perform return type promotions.  */
-  return cif->rtype;
+  switch (cif->rtype->type)
+    {
+    case FFI_TYPE_VOID:
+      return PPC_LD_NONE;
+    case FFI_TYPE_STRUCT:
+      /* A by-reference struct return needs nothing further here: the result
+	 was written straight to the caller's buffer.  A by-value struct
+	 return is loaded into registers by darwin_closure.S, which needs
+	 cif->rtype -- hand it back in the first parameter-save slot.  */
+      if (struct_ret_by_value)
+	{
+	  *pgr0 = (unsigned long) cif->rtype;
+	  return PPC_LD_STRUCT;
+	}
+      return PPC_LD_NONE;
+    case FFI_TYPE_FLOAT:
+      return PPC_LD_F32;
+    case FFI_TYPE_DOUBLE:
+      return PPC_LD_F64;
+#if FFI_TYPE_DOUBLE != FFI_TYPE_LONGDOUBLE
+    case FFI_TYPE_LONGDOUBLE:
+      return PPC_LD_F128;
+#endif
+    case FFI_TYPE_UINT8:
+      return PPC_LD_U8;
+    case FFI_TYPE_SINT8:
+      return PPC_LD_S8;
+    case FFI_TYPE_UINT16:
+      return PPC_LD_U16;
+    case FFI_TYPE_SINT16:
+      return PPC_LD_S16;
+    case FFI_TYPE_UINT32:
+      return PPC_LD_U32;
+    case FFI_TYPE_INT:
+    case FFI_TYPE_SINT32:
+      return PPC_LD_S32;
+    case FFI_TYPE_POINTER:
+      return PPC_LD_PTR;
+    case FFI_TYPE_UINT64:
+    case FFI_TYPE_SINT64:
+      return PPC_LD_I64;
+    default:
+      abort();
+    }
 }
 
-ffi_type *
+int
 ffi_closure_helper_DARWIN (ffi_closure *closure, void *rvalue,
 			   unsigned long *pgr, ffi_dblfl *pfr)
 {
@@ -1442,7 +1545,7 @@ ffi_closure_helper_DARWIN (ffi_closure *closure, void *rvalue,
 }
 
 #if defined (FFI_GO_CLOSURES)
-ffi_type *
+int
 ffi_go_closure_helper_DARWIN (ffi_go_closure *closure, void *rvalue,
 			      unsigned long *pgr, ffi_dblfl *pfr)
 {

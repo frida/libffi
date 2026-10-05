@@ -83,14 +83,21 @@ typedef enum ffi_abi
 
 #if defined (__APPLE__)
 #define FFI_EXTRA_CIF_FIELDS unsigned aarch64_nfixedargs
+#elif !defined(_WIN32) && !defined(__ANDROID__)
+/* iOS, Windows and Android reserve x18 for the system.  Disable Go closures until
+   a new static chain is chosen.  */
+#define FFI_GO_CLOSURES 1
 #endif
-
-/* Go closures put their static chain in x18, which aarch64 platforms reserve,
-   and ffi_call_SYSV installs it for every callee.  Nothing here needs them.  */
 
 #ifndef _WIN32
 /* No complex type on Windows */
 #define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
+
+/* AAPCS64 passes 8- and 16-byte vectors in V/Q registers and homogeneous
+   vector aggregates in consecutive V/Q registers; see is_vfp_type.  */
+#define FFI_TARGET_HAS_VECTOR_TYPE
+
+#define FFI_TARGET_HAS_INT128 1
 
 #endif

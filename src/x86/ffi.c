@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   ffi.c - Copyright (c) 2017, 2022  Anthony Green
+   ffi.c - Copyright (c) 2017, 2022, 2026  Anthony Green
            Copyright (c) 1996, 1998, 1999, 2001, 2007, 2008  Red Hat, Inc.
            Copyright (c) 2002  Ranjit Mathew
            Copyright (c) 2002  Bo Thorsen
@@ -86,18 +86,10 @@ ffi_prep_cif_machdep(ffi_cif *cif)
       flags = X86_RET_VOID;
       break;
     case FFI_TYPE_FLOAT:
-#ifdef FFI_X86_SOFT_FLOAT
-      flags = X86_RET_INT32;
-#else
       flags = X86_RET_FLOAT;
-#endif
       break;
     case FFI_TYPE_DOUBLE:
-#ifdef FFI_X86_SOFT_FLOAT
-      flags = X86_RET_INT64;
-#else
       flags = X86_RET_DOUBLE;
-#endif
       break;
     case FFI_TYPE_LONGDOUBLE:
       flags = X86_RET_LDOUBLE;
@@ -126,7 +118,7 @@ ffi_prep_cif_machdep(ffi_cif *cif)
       break;
     case FFI_TYPE_STRUCT:
       {
-#ifdef X86_WIN32
+#if defined(X86_WIN32) || defined(X86_DARWIN) || defined(X86_FREEBSD)
         size_t size = cif->rtype->size;
         if (size == 1)
           flags = X86_RET_STRUCT_1B;
@@ -278,16 +270,9 @@ extern void FFI_DECLARE_FASTCALL ffi_call_i386(struct call_frame *, char *) FFI_
 #if defined(_MSC_VER)
 #pragma runtime_checks("s", off)
 #endif
-#ifndef __SANITIZE_ADDRESS__
-# ifdef __clang__
-#  if __has_feature(address_sanitizer)
-#   define __SANITIZE_ADDRESS__
-#  endif
-# endif
-#endif
-#ifdef __SANITIZE_ADDRESS__
-__attribute__((noinline,no_sanitize_address))
-#endif
+/* n.b. ffi_call_unix64 will steal the alloca'd `stack` variable here for use
+   _as its own stack_ - so we need to compile this function without ASAN */
+FFI_ASAN_NO_SANITIZE
 static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      void **avalue, void *closure)
@@ -385,7 +370,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	  size_t za = FFI_ALIGN (z, FFI_SIZEOF_ARG);
 	  size_t align = FFI_SIZEOF_ARG;
 
-	  /* Issue 434: For thiscall and fastcall, if the paramter passed
+	  /* Issue 434: For thiscall and fastcall, if the parameter passed
 	     as 64-bit integer or struct, all following integer parameters
 	     will be passed on stack.  */
 	  if ((cabi == FFI_THISCALL || cabi == FFI_FASTCALL)
@@ -462,16 +447,6 @@ struct closure_frame
   void *user_data;				/* 36 */
 };
 
-#ifndef __SANITIZE_ADDRESS__
-# ifdef __clang__
-#  if __has_feature(address_sanitizer)
-#   define __SANITIZE_ADDRESS__
-#  endif
-# endif
-#endif
-#ifdef __SANITIZE_ADDRESS__
-__attribute__((noinline,no_sanitize_address))
-#endif
 int FFI_HIDDEN FFI_DECLARE_FASTCALL
 ffi_closure_inner (struct closure_frame *frame, char *stack)
 {
@@ -544,7 +519,7 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
 	  if (t == FFI_TYPE_STRUCT && ty->alignment >= 16)
 	    align = 16;
 
-	  /* Issue 434: For thiscall and fastcall, if the paramter passed
+	  /* Issue 434: For thiscall and fastcall, if the parameter passed
 	     as 64-bit integer or struct, all following integer parameters
 	     will be passed on stack.  */
 	  if ((cabi == FFI_THISCALL || cabi == FFI_FASTCALL)
@@ -579,8 +554,14 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
       return flags | (cif->bytes << X86_RET_POP_SHIFT);
     case FFI_THISCALL:
     case FFI_FASTCALL:
-      return flags | ((cif->bytes - (narg_reg * FFI_SIZEOF_ARG))
-          << X86_RET_POP_SHIFT);
+      /* The callee must pop exactly the bytes that were passed on the
+	 stack.  Deriving that from cif->bytes minus narg_reg * 4 is wrong
+	 once narg_reg has been force-bumped to 2 (above) for a 64-bit or
+	 struct argument that is itself placed on the stack: the subtraction
+	 then discounts register slots that were never used, under-popping
+	 the stack.  argp has advanced past exactly the stack-resident
+	 arguments (dir == 1 for these ABIs), so use that directly.  */
+      return flags | (((unsigned) (argp - stack)) << X86_RET_POP_SHIFT);
     default:
       return flags;
     }

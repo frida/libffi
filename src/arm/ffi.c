@@ -44,8 +44,6 @@
 
 #if FFI_EXEC_TRAMPOLINE_TABLE
 
-#include "trampoline_table.h"
-
 #ifdef __MACH__
 #include <mach/machine/vm_param.h>
 #endif
@@ -59,13 +57,6 @@ extern unsigned int ffi_arm_trampoline[2] FFI_HIDDEN;
 // the thumb bit.
 extern unsigned char ffi_arm_trampoline[12] FFI_HIDDEN;
 #endif
-#endif
-
-#ifdef HAVE_OLD_LINUX_TOOLCHAIN
-#include <unistd.h>
-#include <sys/syscall.h>
-#define __clear_cache(start, end) \
-	syscall (__ARM_NR_cacheflush, start, end, 0)
 #endif
 
 #if defined(__FreeBSD__) && defined(__arm__)
@@ -370,16 +361,6 @@ extern void ffi_call_SYSV (void *stack, struct call_frame *,
 extern void ffi_call_VFP (void *vfp_space, struct call_frame *,
 			   void (*fn) (void), unsigned vfp_used) FFI_HIDDEN;
 
-#ifndef __SANITIZE_ADDRESS__
-# ifdef __clang__
-#  if __has_feature(address_sanitizer)
-#   define __SANITIZE_ADDRESS__
-#  endif
-# endif
-#endif
-#ifdef __SANITIZE_ADDRESS__
-__attribute__((noinline,no_sanitize_address))
-#endif
 static void
 ffi_call_int (ffi_cif * cif, void (*fn) (void), void *rvalue,
 	      void **avalue, void *closure)
@@ -486,6 +467,11 @@ ffi_prep_incoming_args_SYSV (ffi_cif *cif, void *rvalue,
       size_t z = ty->size;
 
       argp = ffi_align (ty, argp);
+#ifdef __ARMEB__
+      if (z < 4 && ty->type != FFI_TYPE_STRUCT)
+	avalue[i] = (void *) (argp + 4 - z);
+      else
+#endif
       avalue[i] = (void *) argp;
       argp += z;
     }
@@ -534,6 +520,11 @@ ffi_prep_incoming_args_VFP (ffi_cif *cif, void *rvalue, char *stack,
 	  if (tregp + z <= eo_regp || !stack_used)
 	    {
 	      /* Because we're little endian, this is what it turns into.  */
+#ifdef __ARMEB__
+	      if (z < 4 && ty->type != FFI_TYPE_STRUCT)
+		avalue[i] = (void *) (tregp + 4 - z);
+	      else
+#endif
 	      avalue[i] = (void *) tregp;
 	      regp = tregp + z;
 
@@ -556,6 +547,11 @@ ffi_prep_incoming_args_VFP (ffi_cif *cif, void *rvalue, char *stack,
 
       stack_used = 1;
       argp = ffi_align (ty, argp);
+#ifdef __ARMEB__
+      if (z < 4 && ty->type != FFI_TYPE_STRUCT)
+	avalue[i] = (void *) (argp + 4 - z);
+      else
+#endif
       avalue[i] = (void *) argp;
       argp += z;
     }
@@ -572,16 +568,6 @@ struct closure_frame
   char argp[];
 };
 
-#ifndef __SANITIZE_ADDRESS__
-# ifdef __clang__
-#  if __has_feature(address_sanitizer)
-#   define __SANITIZE_ADDRESS__
-#  endif
-# endif
-#endif
-#ifdef __SANITIZE_ADDRESS__
-__attribute__((noinline,no_sanitize_address))
-#endif
 int FFI_HIDDEN
 ffi_closure_inner_SYSV (ffi_cif *cif,
 		        void (*fun) (ffi_cif *, void *, void **, void *),
@@ -595,16 +581,6 @@ ffi_closure_inner_SYSV (ffi_cif *cif,
   return cif->flags;
 }
 
-#ifndef __SANITIZE_ADDRESS__
-# ifdef __clang__
-#  if __has_feature(address_sanitizer)
-#   define __SANITIZE_ADDRESS__
-#  endif
-# endif
-#endif
-#ifdef __SANITIZE_ADDRESS__
-__attribute__((noinline,no_sanitize_address))
-#endif
 int FFI_HIDDEN
 ffi_closure_inner_VFP (ffi_cif *cif,
 		       void (*fun) (ffi_cif *, void *, void **, void *),
@@ -660,9 +636,7 @@ ffi_prep_closure_loc (ffi_closure * closure,
     return FFI_BAD_ABI;
 
 #if FFI_EXEC_TRAMPOLINE_TABLE
-  ffi_trampoline_table *table = closure->trampoline_table;
-  void **config = (void **)((uint8_t *)codeloc - PAGE_MAX_SIZE -
-      table->page_segment_offset);
+  void **config = (void **)((uint8_t *)codeloc - PAGE_MAX_SIZE);
   config[0] = closure;
   config[1] = closure_func;
 #else

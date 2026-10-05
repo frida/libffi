@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   ffiw64.c - Copyright (c) 2018 Anthony Green
+   ffiw64.c - Copyright (c) 2018, 2026 Anthony Green
               Copyright (c) 2014 Red Hat, Inc.
 
    x86 win64 Foreign Function Interface
@@ -30,6 +30,7 @@
 #include <ffi_common.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <tramp.h>
 
 #ifdef X86_WIN64
@@ -115,6 +116,7 @@ EFI64(ffi_prep_cif_machdep)(ffi_cif *cif)
 #if defined(_MSC_VER)
 #pragma runtime_checks("s", off)
 #endif
+FFI_ASAN_NO_SANITIZE
 static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      void **avalue, void *closure)
@@ -124,19 +126,48 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
   size_t rsize;
   struct win64_call_frame *frame;
   ffi_type **arg_types = cif->arg_types;
+  void **avalue_copy = NULL;
   int nargs = cif->nargs;
 
   FFI_ASSERT(cif->abi == FFI_GNUW64 || cif->abi == FFI_WIN64);
 
-  /* If we have any large structure arguments, make a copy so we are passing
-     by value.  */
+  /* If we have any int128 or irregularly sized structure arguments,
+     make a copy so we are passing by value.  The pointer array is cloned
+     first: the caller owns avalue[] and may reuse it for another call,
+     so it must not be modified.  */
   for (i = 0; i < nargs; i++)
     {
       ffi_type *at = arg_types[i];
       int size = at->size;
-      if (at->type == FFI_TYPE_STRUCT && size > 8)
+      bool needcopy = false;
+
+      switch (at->type)
+	{
+	case FFI_TYPE_UINT128:
+	case FFI_TYPE_SINT128:
+	  needcopy = true;
+	  break;
+	case FFI_TYPE_STRUCT:
+	  switch (size)
+	    {
+	    case 1:
+	    case 2:
+	    case 4:
+	    case 8:
+	      break;
+	    default:
+	      needcopy = true;
+	    }
+	}
+      if (needcopy)
         {
           char *argcopy = alloca (size);
+          if (avalue_copy == NULL)
+            {
+              avalue_copy = alloca (nargs * sizeof (void *));
+              memcpy (avalue_copy, avalue, nargs * sizeof (void *));
+              avalue = avalue_copy;
+            }
           memcpy (argcopy, avalue[i], size);
           avalue[i] = argcopy;
         }
@@ -227,7 +258,7 @@ EFI64(ffi_prep_closure_loc)(ffi_closure* closure,
 		      ffi_cif* cif,
 		      void (*fun)(ffi_cif*, void*, void**, void*),
 		      void *user_data,
-		      void *codeloc)
+		      void *codeloc MAYBE_UNUSED)
 {
   static const unsigned char trampoline[FFI_TRAMPOLINE_SIZE - 8] = {
     /* endbr64 */
@@ -307,13 +338,7 @@ struct win64_closure_frame
    this is a nop.  When compiling on unix, this simplifies the assembly,
    and places the burden of saving the extra call-saved registers on
    the compiler.  */
-#ifdef __PROSPERO__
-# define FFI_MS_ABI
-#else
-# define FFI_MS_ABI __attribute__((ms_abi))
-#endif
-
-int FFI_HIDDEN FFI_MS_ABI
+int FFI_HIDDEN __attribute__((ms_abi))
 ffi_closure_win64_inner(ffi_cif *cif,
 			void (*fun)(ffi_cif*, void*, void**, void*),
 			void *user_data,

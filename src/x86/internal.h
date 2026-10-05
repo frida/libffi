@@ -1,7 +1,3 @@
-#ifndef HAVE_X87
-# define FFI_X86_SOFT_FLOAT
-#endif
-
 #define X86_RET_FLOAT		0
 #define X86_RET_DOUBLE		1
 #define X86_RET_LDOUBLE		2

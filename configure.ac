@@ -1,9 +1,20 @@
 dnl Process this with autoconf to create configure
 
-AC_PREREQ([2.71])
+AC_PREREQ([2.68])
 
-AC_INIT([libffi],[3.4.4],[http://github.com/libffi/libffi/issues])
+AC_INIT([libffi],[3.8.0],[http://github.com/libffi/libffi/issues])
 AC_CONFIG_HEADERS([fficonfig.h])
+
+dnl Derive the version macros from AC_INIT so they cannot drift when the
+dnl release version is bumped.  FFI_VERSION_NUMBER encodes X.Y.Z as
+dnl X*10000 + Y*100 + Z, ignoring any non-numeric suffix (e.g. -rc0).
+FFI_VERSION_STRING="AC_PACKAGE_VERSION"
+ffi_version_major=`echo "AC_PACKAGE_VERSION" | cut -d. -f1`
+ffi_version_minor=`echo "AC_PACKAGE_VERSION" | cut -d. -f2 | sed 's/[[^0-9]].*//'`
+ffi_version_micro=`echo "AC_PACKAGE_VERSION" | cut -d. -f3 | sed 's/[[^0-9]].*//'`
+FFI_VERSION_NUMBER=`expr ${ffi_version_major:-0} \* 10000 + ${ffi_version_minor:-0} \* 100 + ${ffi_version_micro:-0}`
+AC_SUBST(FFI_VERSION_STRING)
+AC_SUBST(FFI_VERSION_NUMBER)
 
 AC_CANONICAL_TARGET
 target_alias=${target_alias-$host_alias}
@@ -42,7 +53,7 @@ AC_PROG_EGREP
 LT_INIT
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_CHECK_TOOL(READELF, readelf)
+AC_CHECK_TOOLS([READELF], [readelf greadelf])
 
 # Test for 64-bit build.
 AC_CHECK_SIZEOF([size_t])
@@ -89,10 +100,6 @@ m4_warn([obsolete],
 [The preprocessor macro `STDC_HEADERS' is obsolete.
   Except in unusual embedded environments, you can safely include all
   ISO C90 headers unconditionally.])dnl
-# Autoupdate added the next two lines to ensure that your configure
-# script's behavior did not change.  They are probably safe to remove.
-AC_CHECK_INCLUDES_DEFAULT
-AC_PROG_EGREP
 
 AC_CHECK_FUNCS(memcpy)
 AC_CHECK_HEADERS(alloca.h)
@@ -118,9 +125,15 @@ fi
 AC_SUBST(HAVE_LONG_DOUBLE)
 AC_SUBST(HAVE_LONG_DOUBLE_VARIANT)
 
+AC_CHECK_TYPE(__int128_t,
+	      AC_DEFINE(HAVE_INT128, 1,
+			[Define if __int128_t and __uint128_t are supported.]))
+
 AC_C_BIGENDIAN
 
 GCC_AS_CFI_PSEUDO_OP
+
+AC_ARG_VAR([WASM64_MEMORY64], [Used only for the wasm64 target. Set to 1 (default) or 2 for Emscripten's -sMEMORY64 mode])
 
 case "$TARGET" in
   SPARC)
@@ -171,7 +184,7 @@ case "$TARGET" in
 	libffi_cv_as_s390_zarch=no
 	echo 'void foo(void) { bar(); bar(); }' > conftest.c
 	if $CC $CFLAGS -S conftest.c > /dev/null 2>&1; then
-	    if grep -q brasl conftest.s; then
+	    if $GREP -q brasl conftest.s; then
 	        libffi_cv_as_s390_zarch=yes
 	    fi
 	fi
@@ -181,6 +194,19 @@ case "$TARGET" in
 		  [Define if the compiler uses zarch features.])
     fi
     ;;
+  wasm64)
+    if test -z "$WASM64_MEMORY64"; then
+      WASM64_MEMORY64=1
+    fi
+    CFLAGS="$CFLAGS -sMEMORY64=$WASM64_MEMORY64"
+    ;;
+  LOONGARCH64)
+    CFLAGS="$CFLAGS -mcmodel=medium"
+    ;;
+  LOONGARCH32)
+    # No special for LoongArch32 now.
+    ;;
+
 esac
 
 AC_CACHE_CHECK([whether compiler supports pointer authentication],
@@ -189,17 +215,17 @@ AC_CACHE_CHECK([whether compiler supports pointer authentication],
    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[
 #ifdef __clang__
 # if __has_feature(ptrauth_calls)
-#  define HAVE_PTRAUTH 1
+#  define HAVE_ARM64E_PTRAUTH 1
 # endif
 #endif
 
-#ifndef HAVE_PTRAUTH
+#ifndef HAVE_ARM64E_PTRAUTH
 # error Pointer authentication not supported
 #endif
 		   ]])],[libffi_cv_as_ptrauth=yes],[libffi_cv_as_ptrauth=no])
 ])
 if test "x$libffi_cv_as_ptrauth" = xyes; then
-    AC_DEFINE(HAVE_PTRAUTH, 1,
+    AC_DEFINE(HAVE_ARM64E_PTRAUTH, 1,
 	      [Define if your compiler supports pointer authentication.])
 fi
 
@@ -229,7 +255,7 @@ case "$target" in
                  [Cannot use PROT_EXEC on this target, so, we revert to
                    alternative means])
      ;;
-     *-apple-* | *-*-freebsd* | *-*-kfreebsd* | *-*-openbsd* | *-pc-solaris* | *-linux-android*)
+     *-apple-* | *-*-dragonfly* | *-*-freebsd* | *-*-kfreebsd* | *-*-openbsd* | *-pc-solaris* | *-linux-android*)
        AC_DEFINE(FFI_MMAP_EXEC_WRIT, 1,
                  [Cannot use malloc on this target, so, we revert to
                    alternative means])
@@ -277,7 +303,7 @@ if test "x$GCC" = "xyes"; then
   	libffi_cv_ro_eh_frame=yes
   	echo 'extern void foo (void); void bar (void) { foo (); foo (); }' > conftest.c
   	if $CC $CFLAGS -c -fpic -fexceptions $libffi_cv_no_lto -o conftest.o conftest.c > /dev/null 2>&1; then
-	    if $READELF -WS conftest.o 2>/dev/null | grep -q -n 'eh_frame .* WA'; then
+	    if $READELF -WS conftest.o 2>/dev/null | $GREP -q -n 'eh_frame .* WA'; then
 	        libffi_cv_ro_eh_frame=no
 	    fi
   	fi
@@ -298,7 +324,7 @@ if test "x$GCC" = "xyes"; then
   	echo 'int __attribute__ ((visibility ("hidden"))) foo (void) { return 1  ; }' > conftest.c
   	libffi_cv_hidden_visibility_attribute=no
   	if AC_TRY_COMMAND(${CC-cc} -Werror -S conftest.c -o conftest.s 1>&AS_MESSAGE_LOG_FD); then
-  	    if $EGREP '(\.hidden|\.private_extern).*foo' conftest.s >/dev/null; then
+  	    if $EGREP '(\.hidden|\.private_extern).*foo|foo.*,hidden' conftest.s >/dev/null; then
   		libffi_cv_hidden_visibility_attribute=yes
   	    fi
   	fi
@@ -382,7 +408,9 @@ case "$target" in
                    [Define this if you want statically defined trampolines])
        fi
      ;;
-     *arm*-*-linux-* | aarch64*-*-linux-* | i*86-*-linux-* | x86_64-*-linux-* | loongarch*-*-linux-*)
+     *arm*-*-linux-* | aarch64*-*-linux-* | i*86-*-linux-* | x86_64-*-linux-* \
+     | loongarch*-*-linux-* | s390x*-linux-* | powerpc*-linux-* \
+     | riscv*-linux-*)
        AC_DEFINE(FFI_EXEC_STATIC_TRAMP, 1,
                  [Define this if you want statically defined trampolines])
      ;;

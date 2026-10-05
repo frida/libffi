@@ -1,10 +1,3 @@
-/* SSE2 is baseline on x86-64, so a build without it is one where nothing may
-   travel in an xmm register: a double goes where an integer of its size would.
-   Kernel-mode builds are compiled this way, FP being unavailable there.  */
-#ifndef __SSE2__
-# define FFI_X86_64_SOFT_FLOAT
-#endif
-
 #define UNIX64_RET_VOID		0
 #define UNIX64_RET_UINT8	1
 #define UNIX64_RET_UINT16	2
@@ -21,8 +14,9 @@
 #define UNIX64_RET_ST_RAX_XMM0	13
 #define UNIX64_RET_ST_XMM0_XMM1	14
 #define UNIX64_RET_ST_RAX_RDX	15
+#define UNIX64_RET_XMM128	16	/* binary128 long double in %xmm0 */
 
-#define UNIX64_RET_LAST		15
+#define UNIX64_RET_LAST		16
 
 #define UNIX64_FLAG_RET_IN_MEM	(1 << 10)
 #define UNIX64_FLAG_XMM_ARGS	(1 << 11)

@@ -73,6 +73,7 @@ case "${host}" in
 	;;
   hppa*64-*-hpux*)
 	TARGET=PA64_HPUX; TARGETDIR=pa
+	SOURCES="ffi64.c hpux64.S"
 	;;
   hppa*-*-hpux*)
 	TARGET=PA_HPUX; TARGETDIR=pa
@@ -140,8 +141,13 @@ case "${host}" in
 	SOURCES="ffi.c sysv.S"
 	;;
 
-  loongarch64-*-*)
-	TARGET=LOONGARCH64; TARGETDIR=loongarch64
+  loongarch*-*-*)
+	if test $ac_cv_sizeof_size_t = 4; then
+	  TARGET=LOONGARCH32
+	else
+	  TARGET=LOONGARCH64
+	fi
+	TARGETDIR=loongarch
 	SOURCES="ffi.c sysv.S"
 	;;
 
@@ -184,11 +190,6 @@ case "${host}" in
 	TARGET=MIPS; TARGETDIR=mips
 	;;
 
-  nios2*-linux*)
-	TARGET=NIOS2; TARGETDIR=nios2
-	SOURCES="ffi.c sysv.S"
-	;;
-
   or1k*-*-*)
 	TARGET=OR1K; TARGETDIR=or1k
 	SOURCES="ffi.c sysv.S"
@@ -204,7 +205,7 @@ case "${host}" in
   powerpc-*-eabi*)
 	TARGET=POWERPC; TARGETDIR=powerpc
 	;;
-  powerpc-*-beos*)
+  powerpc-*-beos* | powerpc-*-haiku*)
 	TARGET=POWERPC; TARGETDIR=powerpc
 	;;
   powerpc-*-darwin* | powerpc64-*-darwin*)
@@ -262,6 +263,16 @@ case "${host}" in
   vax-*-*)
 	TARGET=VAX; TARGETDIR=vax
 	SOURCES="ffi.c elfbsd.S"
+	;;
+
+  wasm32-*-*)
+	TARGET=wasm32; TARGETDIR=wasm
+	SOURCES="ffi.c"
+	;;
+
+  wasm64-*-*)
+	TARGET=wasm64; TARGETDIR=wasm
+	SOURCES="ffi.c"
 	;;
 
   xtensa*-*)

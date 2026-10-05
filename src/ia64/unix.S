@@ -36,6 +36,12 @@
 
 	.pred.safe_across_calls p1-p5,p16-p63
 .text
+/* HPUX assembler needs to see these symbols, otherwise compilation
+   fails */
+#ifdef __hpux
+      .global memcpy
+      .global ffi_closure_unix_inner
+#endif
 
 /* int ffi_call_unix (struct ia64_args *stack, PTR64 rvalue,
 		      void (*fn)(void), int flags);
@@ -104,7 +110,12 @@ ffi_call_unix:
 	mov	ar.pfs = loc0
 	addl	r18 = @ltoffx(.Lst_table), gp
 	;;
+	/* default assembler on HP-UX does not support LDXMOV */
+#ifdef __hpux
+	ld8	r18 = [r18]
+#else
 	ld8.mov	r18 = [r18], .Lst_table
+#endif
 	mov	b0 = loc1
 	;;
 	shladd	r18 = r16, 3, r18
@@ -357,7 +368,11 @@ ffi_closure_unix:
 	addl	r18 = @ltoffx(.Lld_table), gp
 	mov	ar.pfs = loc0
 	;;
-	ld8.mov	r18 = [r18], .Lld_table
+#ifdef __hpux
+	ld8	r18 = [r18]
+#else
+	ld8.mov	r18 = [r18], .Lst_table
+#endif
 	mov	b0 = loc1
 	;;
 	shladd	r18 = r16, 3, r18
@@ -515,8 +530,11 @@ ffi_closure_unix:
 	;;
 
 	.endp	ffi_closure_unix
-
+#ifdef __hpux
+	.rodata
+#else
 	.section .rodata
+#endif
 	.align	8
 .Lst_table:
 	data8	@pcrel(.Lst_void)		// FFI_TYPE_VOID
@@ -535,6 +553,9 @@ ffi_closure_unix:
 	data8	@pcrel(.Lst_void)		// FFI_TYPE_STRUCT
 	data8	@pcrel(.Lst_int64)		// FFI_TYPE_POINTER
 	data8	@pcrel(.Lst_void)		// FFI_TYPE_COMPLEX (not implemented)
+	data8	@pcrel(.Lst_void)		// FFI_TYPE_UINT128 (not implemented)
+	data8	@pcrel(.Lst_void)		// FFI_TYPE_SINT128 (not implemented)
+	data8	@pcrel(.Lst_void)		// FFI_TYPE_VECTOR  (rejected in ffi_prep_cif_core)
 	data8 	@pcrel(.Lst_small_struct)	// FFI_IA64_TYPE_SMALL_STRUCT
 	data8	@pcrel(.Lst_hfa_float)		// FFI_IA64_TYPE_HFA_FLOAT
 	data8	@pcrel(.Lst_hfa_double)		// FFI_IA64_TYPE_HFA_DOUBLE
@@ -557,6 +578,9 @@ ffi_closure_unix:
 	data8	@pcrel(.Lld_void)		// FFI_TYPE_STRUCT
 	data8	@pcrel(.Lld_int)		// FFI_TYPE_POINTER
 	data8	@pcrel(.Lld_void)		// FFI_TYPE_COMPLEX (not implemented)
+	data8	@pcrel(.Lld_void)		// FFI_TYPE_UINT128 (not implemented)
+	data8	@pcrel(.Lld_void)		// FFI_TYPE_SINT128 (not implemented)
+	data8	@pcrel(.Lld_void)		// FFI_TYPE_VECTOR  (rejected in ffi_prep_cif_core)
 	data8 	@pcrel(.Lld_small_struct)	// FFI_IA64_TYPE_SMALL_STRUCT
 	data8	@pcrel(.Lld_hfa_float)		// FFI_IA64_TYPE_HFA_FLOAT
 	data8	@pcrel(.Lld_hfa_double)		// FFI_IA64_TYPE_HFA_DOUBLE

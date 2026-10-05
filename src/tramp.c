@@ -1,6 +1,6 @@
 /* -----------------------------------------------------------------------
    tramp.c - Copyright (c) 2020 Madhavan T. Venkataraman
-             Copyright (c) 2022 Anthony Green
+             Copyright (c) 2022, 2026 Anthony Green
 
    API and support functions for managing statically defined closure
    trampolines.
@@ -39,6 +39,10 @@
 #ifdef __linux__
 #define _GNU_SOURCE 1
 #endif
+
+#include <ffi.h>
+#include <ffi_common.h>
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -54,11 +58,6 @@
 #ifdef __CYGWIN__
 #include <limits.h>
 #endif
-#elif defined (FFI_TRAMP_EMBEDDER)
-#include <stddef.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <tramp.h>
 #endif
 
 /*
@@ -202,16 +201,28 @@ static int tramp_table_alloc (void);
 
 #if defined (__linux__) || defined (__CYGWIN__)
 
+/* Stringify a macro value for use in a scanf field-width specifier.  */
+#define FFI_TRAMP_STR_(x) #x
+#define FFI_TRAMP_STR(x)  FFI_TRAMP_STR_(x)
+
 static int
 ffi_tramp_get_libffi (void)
 {
   FILE *fp;
-  char file[PATH_MAX], line[PATH_MAX+100], perm[10], dev[10];
+  /* `file' is sized PATH_MAX+1 so a scanf field width of PATH_MAX
+     (which permits PATH_MAX characters plus the terminating NUL) cannot
+     overflow.  */
+  char file[PATH_MAX+1], line[PATH_MAX+100], perm[10], dev[10];
   unsigned long start, end, offset, inode;
   uintptr_t addr = (uintptr_t) tramp_globals.text;
   int nfields, found;
+  int open_flags = O_RDONLY;
 
-  snprintf (file, PATH_MAX, "/proc/%d/maps", getpid());
+#ifdef O_CLOEXEC
+  open_flags |= O_CLOEXEC;
+#endif
+
+  snprintf (file, sizeof (file), "/proc/%d/maps", getpid());
   fp = fopen (file, "r");
   if (fp == NULL)
     return 0;
@@ -221,7 +232,10 @@ ffi_tramp_get_libffi (void)
     if (fgets (line, sizeof (line), fp) == 0)
       break;
 
-    nfields = sscanf (line, "%lx-%lx %9s %lx %9s %ld %s",
+    /* Bound the path field width so a long mapping name cannot overflow
+       the fixed-size `file' buffer.  */
+    nfields = sscanf (line,
+      "%lx-%lx %9s %lx %9s %ld %" FFI_TRAMP_STR(PATH_MAX) "s",
       &start, &end, perm, &offset, dev, &inode, file);
     if (nfields != 7)
       continue;
@@ -237,7 +251,7 @@ ffi_tramp_get_libffi (void)
   if (!found)
     return 0;
 
-  tramp_globals.fd = open (file, O_RDONLY);
+  tramp_globals.fd = open (file, open_flags);
   if (tramp_globals.fd == -1)
     return 0;
 
@@ -271,7 +285,7 @@ ffi_tramp_get_temp_file (void)
    * trampoline table to make sure that the temporary file can be mapped.
    */
   count = write(tramp_globals.fd, tramp_globals.text, tramp_globals.map_size);
-  if (count == tramp_globals.map_size && tramp_table_alloc ())
+  if (count >=0 && (size_t)count == tramp_globals.map_size && tramp_table_alloc ())
     return 1;
 
   close (tramp_globals.fd);
@@ -293,14 +307,6 @@ ffi_tramp_init_os (void)
   return ffi_tramp_get_temp_file ();
 }
 
-#elif defined (FFI_TRAMP_EMBEDDER)
-
-static int
-ffi_tramp_init_os (void)
-{
-  return 1;
-}
-
 #endif /* defined (__linux__) || defined (__CYGWIN__) */
 
 /* --------------------------- OS-specific Locking -------------------------*/
@@ -316,21 +322,9 @@ ffi_tramp_lock(void)
 }
 
 static void
-ffi_tramp_unlock()
+ffi_tramp_unlock(void)
 {
   pthread_mutex_unlock (&tramp_globals_mutex);
-}
-
-#elif defined (FFI_TRAMP_EMBEDDER)
-
-static void
-ffi_tramp_lock (void)
-{
-}
-
-static void
-ffi_tramp_unlock (void)
-{
 }
 
 #endif /* defined (__linux__) || defined (__CYGWIN__) */
@@ -389,47 +383,6 @@ tramp_table_unmap (struct tramp_table *table)
   (void) munmap (table->parm_table, tramp_globals.map_size);
 }
 
-#elif defined (FFI_TRAMP_EMBEDDER)
-
-/*
- * Supplied by the embedder. Produce an executable code table holding a copy of
- * `text` and a writable parameter table immediately following it (the two must
- * be `map_size` apart for the trampolines' PC-relative parameter access).
- * Returns 0 on failure, which makes static trampolines report "not supported".
- */
-int __attribute__ ((weak))
-ffi_tramp_embedder_map (const void *text, size_t map_size, void **code_table,
-  void **parm_table)
-{
-  (void) text;
-  (void) map_size;
-  (void) code_table;
-  (void) parm_table;
-  return 0;
-}
-
-void __attribute__ ((weak))
-ffi_tramp_embedder_unmap (void *code_table, void *parm_table, size_t map_size)
-{
-  (void) code_table;
-  (void) parm_table;
-  (void) map_size;
-}
-
-static int
-tramp_table_map (struct tramp_table *table)
-{
-  return ffi_tramp_embedder_map (tramp_globals.text, tramp_globals.map_size,
-    &table->code_table, &table->parm_table);
-}
-
-static void
-tramp_table_unmap (struct tramp_table *table)
-{
-  ffi_tramp_embedder_unmap (table->code_table, table->parm_table,
-    tramp_globals.map_size);
-}
-
 #endif /* defined (__linux__) || defined (__CYGWIN__) */
 
 /* ------------------------ Trampoline Initialization ----------------------*/
@@ -440,6 +393,8 @@ tramp_table_unmap (struct tramp_table *table)
 static int
 ffi_tramp_init (void)
 {
+  long page_size;
+
   if (tramp_globals.status == TRAMP_GLOBALS_PASSED)
     return 1;
 
@@ -462,8 +417,19 @@ ffi_tramp_init (void)
     &tramp_globals.map_size);
   tramp_globals.ntramp = tramp_globals.map_size / tramp_globals.size;
 
-  if (sysconf (_SC_PAGESIZE) > tramp_globals.map_size)
-    return 0;
+  /*
+   * The trampoline code table is a single, fixed-size mapping.  If the
+   * system page size is larger than that mapping, the static trampoline
+   * mechanism cannot be used.  Both values are invariant for the life of
+   * the process, so cache the FAILED verdict rather than re-running the
+   * whole initialization on every allocation.
+   */
+  page_size = sysconf (_SC_PAGESIZE);
+  if (page_size >= 0 && (size_t)page_size > tramp_globals.map_size)
+    {
+      tramp_globals.status = TRAMP_GLOBALS_FAILED;
+      return 0;
+    }
 
   if (ffi_tramp_init_os ())
     {

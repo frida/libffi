@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   ffi.c - (c) 2011 Anthony Green
+   ffi.c - (c) 2011, 2026 Anthony Green
            (c) 2008 Red Hat, Inc.
 	   (c) 2006 Free Software Foundation, Inc.
            (c) 2003-2004 Randolph Chung <tausq@debian.org>
@@ -56,27 +56,12 @@ static inline int ffi_struct_type(ffi_type *t)
   size_t sz = t->size;
 
   /* Small structure results are passed in registers,
-     larger ones are passed by pointer.  Note that
-     small structures of size 2, 4 and 8 differ from
-     the corresponding integer types in that they have
-     different alignment requirements.  */
+     larger ones are passed by pointer.  Note that small
+     structures differ from the corresponding integer
+     types in that they have different alignment requirements.  */
 
-  if (sz <= 1)
-    return FFI_TYPE_UINT8;
-  else if (sz == 2)
-    return FFI_TYPE_SMALL_STRUCT2;
-  else if (sz == 3)
-    return FFI_TYPE_SMALL_STRUCT3;
-  else if (sz == 4)
-    return FFI_TYPE_SMALL_STRUCT4;
-  else if (sz == 5)
-    return FFI_TYPE_SMALL_STRUCT5;
-  else if (sz == 6)
-    return FFI_TYPE_SMALL_STRUCT6;
-  else if (sz == 7)
-    return FFI_TYPE_SMALL_STRUCT7;
-  else if (sz <= 8)
-    return FFI_TYPE_SMALL_STRUCT8;
+  if (sz <= 8)
+    return -sz;
   else
     return FFI_TYPE_STRUCT; /* else, we pass it by pointer.  */
 }
@@ -295,9 +280,24 @@ static void ffi_size_stack_pa32(ffi_cif *cif)
 
 #ifdef PA_HPUX
 	case FFI_TYPE_LONGDOUBLE:
+	  z += 1; /* passed by pointer, like a large struct */
+	  break;
 #endif
+
 	case FFI_TYPE_STRUCT:
-	  z += 1; /* pass by ptr, callee will copy */
+	  /* This must mirror the slot accounting in ffi_prep_args_pa32:
+	     structs of 1-4 bytes occupy one slot, structs of 5-8 bytes are
+	     passed inline in two even-aligned slots (exactly like a 64-bit
+	     value), and larger structs are passed by pointer in one slot.
+	     z stays offset from the marshaller's slot by FIRST_ARG_SLOT (odd),
+	     so (z & 1) tracks the same alignment the marshaller applies.  */
+	  {
+	    size_t len = (*ptr)->size;
+	    if (len <= 4 || len > 8)
+	      z += 1;
+	    else
+	      z += 2 + (z & 1);
+	  }
 	  break;
 
 	default: /* <= 32-bit values */
@@ -376,8 +376,32 @@ extern void ffi_call_pa32(void (*)(UINT32 *, extended_cif *, unsigned),
 void ffi_call(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
 {
   extended_cif ecif;
+  size_t i, nargs = cif->nargs;
+  ffi_type **arg_types = cif->arg_types;
+  void **avalue_copy = NULL;
 
   ecif.cif = cif;
+
+  /* If we have any large structure arguments, make a copy so we are passing
+     by value.  The pointer array is cloned first: the caller owns avalue[]
+     and may reuse it for another call, so it must not be modified.  */
+  for (i = 0; i < nargs; i++)
+    {
+      ffi_type *at = arg_types[i];
+      int size = at->size;
+      if (at->type == FFI_TYPE_STRUCT && size > 8)
+	{
+	  char *argcopy = alloca (size);
+	  if (avalue_copy == NULL)
+	    {
+	      avalue_copy = alloca (nargs * sizeof (void *));
+	      memcpy (avalue_copy, avalue, nargs * sizeof (void *));
+	      avalue = avalue_copy;
+	    }
+	  memcpy (argcopy, avalue[i], size);
+	  avalue[i] = argcopy;
+	}
+    }
   ecif.avalue = avalue;
 
   /* If the return value is a struct and we don't have a return
@@ -428,8 +452,7 @@ ffi_status ffi_closure_inner_pa32(ffi_closure *closure, UINT32 *stack)
   char *tmp;
   int i, avn;
   unsigned int slot = FIRST_ARG_SLOT;
-  register UINT32 r28 asm("r28");
-  ffi_closure *c = (ffi_closure *)FFI_RESTORE_PTR (closure);
+  register UINT32 r28 __asm__("r28");
 
   cif = closure->cif;
 
@@ -532,7 +555,7 @@ ffi_status ffi_closure_inner_pa32(ffi_closure *closure, UINT32 *stack)
     }
 
   /* Invoke the closure.  */
-  (c->fun) (cif, rvalue, avalue, c->user_data);
+  (closure->fun) (cif, rvalue, avalue, closure->user_data);
 
   debug(3, "after calling function, ret[0] = %08x, ret[1] = %08x\n", u.ret[0],
 	u.ret[1]);
@@ -541,16 +564,16 @@ ffi_status ffi_closure_inner_pa32(ffi_closure *closure, UINT32 *stack)
   switch (cif->flags)
     {
     case FFI_TYPE_UINT8:
-      *(stack - FIRST_ARG_SLOT) = (UINT8)(u.ret[0] >> 24);
+      *(stack - FIRST_ARG_SLOT) = (UINT8)u.ret[0];
       break;
     case FFI_TYPE_SINT8:
-      *(stack - FIRST_ARG_SLOT) = (SINT8)(u.ret[0] >> 24);
+      *(stack - FIRST_ARG_SLOT) = (SINT8)u.ret[0];
       break;
     case FFI_TYPE_UINT16:
-      *(stack - FIRST_ARG_SLOT) = (UINT16)(u.ret[0] >> 16);
+      *(stack - FIRST_ARG_SLOT) = (UINT16)u.ret[0];
       break;
     case FFI_TYPE_SINT16:
-      *(stack - FIRST_ARG_SLOT) = (SINT16)(u.ret[0] >> 16);
+      *(stack - FIRST_ARG_SLOT) = (SINT16)u.ret[0];
       break;
     case FFI_TYPE_INT:
     case FFI_TYPE_SINT32:
@@ -575,6 +598,7 @@ ffi_status ffi_closure_inner_pa32(ffi_closure *closure, UINT32 *stack)
       /* Don't need a return value, done by caller.  */
       break;
 
+    case FFI_TYPE_SMALL_STRUCT1:
     case FFI_TYPE_SMALL_STRUCT2:
     case FFI_TYPE_SMALL_STRUCT3:
     case FFI_TYPE_SMALL_STRUCT4:
@@ -633,8 +657,6 @@ ffi_prep_closure_loc (ffi_closure* closure,
 		      void *user_data,
 		      void *codeloc)
 {
-  ffi_closure *c = (ffi_closure *)FFI_RESTORE_PTR (closure);
-
   /* The layout of a function descriptor.  A function pointer with the PLABEL
      bit set points to a function descriptor.  */
   struct pa32_fd
@@ -660,14 +682,14 @@ ffi_prep_closure_loc (ffi_closure* closure,
   fd = (struct pa32_fd *)((UINT32)ffi_closure_pa32 & ~3);
 
   /* Setup trampoline.  */
-  tramp = (struct ffi_pa32_trampoline_struct *)c->tramp;
+  tramp = (struct ffi_pa32_trampoline_struct *)closure->tramp;
   tramp->code_pointer = fd->code_pointer;
   tramp->fake_gp = (UINT32)codeloc & ~3;
   tramp->real_gp = fd->gp;
 
-  c->cif  = cif;
-  c->user_data = user_data;
-  c->fun  = fun;
+  closure->cif  = cif;
+  closure->user_data = user_data;
+  closure->fun  = fun;
 
   return FFI_OK;
 }

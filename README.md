@@ -1,8 +1,7 @@
 Status
 ======
 
-libffi-3.4.4 was released on October 23, 2022.  Check the libffi web
-page for updates: <URL:http://sourceware.org/libffi/>.
+libffi-3.8.0 was released on August 8, 2026.
 
 
 What is libffi?
@@ -52,6 +51,8 @@ tested:
 | Alpha           | Linux            | GCC                     |
 | Alpha           | Tru64            | GCC                     |
 | ARC             | Linux            | GCC                     |
+| ARC32           | Linux            | GCC                     |
+| ARC64           | Linux            | GCC                     |
 | ARM             | Linux            | GCC                     |
 | ARM             | iOS              | GCC                     |
 | ARM             | Windows          | MSVC                    |
@@ -59,8 +60,10 @@ tested:
 | Blackfin        | uClinux          | GCC                     |
 | CSKY            | Linux            | GCC                     |
 | HPPA            | HPUX             | GCC                     |
+| HPPA64          | HPUX             | GCC                     |
 | KVX             | Linux            | GCC                     |
 | IA-64           | Linux            | GCC                     |
+| LoongArch32     | Linux            | GCC                     |
 | LoongArch64     | Linux            | GCC                     |
 | M68K            | FreeMiNT         | GCC                     |
 | M68K            | Linux            | GCC                     |
@@ -73,7 +76,6 @@ tested:
 | MIPS            | RTEMS            | GCC                     |
 | MIPS64          | Linux            | GCC                     |
 | Moxie           | Bare metal       | GCC                     |
-| Nios II         | Linux            | GCC                     |
 | OpenRISC        | Linux            | GCC                     |
 | PowerPC 32-bit  | AIX              | GCC                     |
 | PowerPC 32-bit  | AIX              | IBM XL C                |
@@ -89,6 +91,9 @@ tested:
 | RISC-V 64-bit   | Linux            | GCC                     |
 | S390            | Linux            | GCC                     |
 | S390X           | Linux            | GCC                     |
+| SH3             | Linux            | GCC                     |
+| SH4             | Linux            | GCC                     |
+| SH5/SH64        | Linux            | GCC                     |
 | SPARC           | Linux            | GCC                     |
 | SPARC           | Solaris          | GCC                     |
 | SPARC           | Solaris          | Oracle Solaris Studio C |
@@ -97,6 +102,8 @@ tested:
 | SPARC64         | Solaris          | Oracle Solaris Studio C |
 | TILE-Gx/TILEPro | Linux            | GCC                     |
 | VAX             | OpenBSD/vax      | GCC                     |
+| WASM32          | Emscripten       | EMCC                    |
+| WASM64          | Emscripten       | EMCC                    |
 | X86             | FreeBSD          | GCC                     |
 | X86             | GNU HURD         | GCC                     |
 | X86             | Interix          | GCC                     |
@@ -107,14 +114,15 @@ tested:
 | X86             | Solaris          | GCC                     |
 | X86             | Solaris          | Oracle Solaris Studio C |
 | X86             | Windows/Cygwin   | GCC                     |
-| X86             | Windows/MingW    | GCC                     |
+| X86             | Windows/MinGW    | GCC                     |
+| X86-64          | DragonFly BSD    | GCC                     |
 | X86-64          | FreeBSD          | GCC                     |
 | X86-64          | Linux            | GCC                     |
 | X86-64          | Linux/x32        | GCC                     |
 | X86-64          | OpenBSD          | GCC                     |
 | X86-64          | Solaris          | Oracle Solaris Studio C |
 | X86-64          | Windows/Cygwin   | GCC                     |
-| X86-64          | Windows/MingW    | GCC                     |
+| X86-64          | Windows/MinGW    | GCC                     |
 | X86-64          | Mac OSX          | GCC                     |
 | Xtensa          | Linux            | GCC                     |
 
@@ -128,11 +136,9 @@ First you must configure the distribution for your particular
 system. Go to the directory you wish to build libffi in and run the
 "configure" program found in the root directory of the libffi source
 distribution.  Note that building libffi requires a C99 compatible
-compiler.
-
-If you're building libffi directly from git hosted sources, configure
-won't exist yet; run ./autogen.sh first.  This will require that you
-install autoconf, automake and libtool.
+compiler.  If you're building libffi directly from git hosted sources,
+configure won't exist yet; run ./autogen.sh first.  This will require
+that you install autoconf, automake, libtool and texinfo.
 
 You may want to tell configure where to install the libffi library and
 header files. To do that, use the ``--prefix`` configure switch.  Libffi
@@ -154,7 +160,7 @@ It's also possible to build libffi on Windows platforms with
 Microsoft's Visual C++ compiler.  In this case, use the msvcc.sh
 wrapper script during configuration like so:
 
-    path/to/configure CC=path/to/msvcc.sh CXX=path/to/msvcc.sh LD=link CPP="cl -nologo -EP" CPPFLAGS="-DFFI_BUILDING_DLL"
+    path/to/configure CC=path/to/msvcc.sh CXX=path/to/msvcc.sh LD=link CPP="cl -nologo -EP" CXXCPP="cl -nologo -EP" CPPFLAGS="-DFFI_BUILDING_DLL"
 
 For 64-bit Windows builds, use ``CC="path/to/msvcc.sh -m64"`` and
 ``CXX="path/to/msvcc.sh -m64"``.  You may also need to specify
@@ -196,6 +202,132 @@ History
 =======
 
 See the git log for details at http://github.com/libffi/libffi.
+
+    TBD
+        Fix aarch64 and arm big-endian closures receiving garbage
+          sub-word integer and scalar-float arguments, and aarch64
+          big-endian sub-word/float return values, by offsetting to the
+          least-significant bytes of the register or stack slot
+          (#1012, closes #1011 and #675).
+        Fix powerpc64 _Complex long double when the ABI's long double
+          is 64 bits (e.g. -mlong-double-64 or musl).
+        Fix closure allocation to fail gracefully when the runtime
+          page size lookup fails (#1015).
+        Fix building the wasm port with newer Emscripten by declaring
+          the stack helper dependencies in EM_JS_DEPS (#1019).
+        Emit subsections_via_symbols on Apple platforms, enabling
+          linker dead-stripping of unused code (#1017).
+
+    3.8.0 August-8-2026
+        Add FFI_TYPE_VECTOR (SIMD) type support with libffi-computed
+          layout, for aarch64 and x86-64 (#1000, closes #773).
+        Add ffi_call_plan_size to report the total memory a reusable call
+          plan owns, for embedders that account for the memory held by
+          long-lived plans.
+        Add powerpc64 ELFv2 _Complex long double support for both
+          IBM-128 (double-double) and IEEE-128 formats (#1003, closes #1001).
+        Fix powerpc64 big-endian ELFv2 closures returning 5-, 6-, or
+          7-byte structs: missing return jump-table entries produced a
+          wrong result and leaked a libffi code pointer.
+        Fix ia64 return-value jump-table desync after the FFI_TYPE_LAST
+          bump, which corrupted small-struct and HFA returns.
+        Fix powerpc Darwin closure returns broken by #951 (#1002).
+        Return small (1, 2, 4 or 8 byte) structs in registers on the i386
+          FreeBSD and OpenBSD targets, matching the platform ABI and
+          fixing a segfault on struct returns through ffi_call and closures.
+        Cache the static trampoline "unsupported" result on hosts whose
+          page size exceeds the trampoline table mapping, avoiding
+          redundant re-initialization on every closure allocation
+          (e.g. 64K-page aarch64).
+
+    3.7.1 July-10-2026
+        Fix aarch64 ffi_call memory corruption when passing many large
+          structs by value.
+        Fix i386 thiscall/fastcall closure stack cleanup for 64-bit
+          integer and struct arguments.
+        Fix aarch64 int128 argument split between x7 and the stack on
+          Darwin (#993).
+        Fix aarch64 clang-cl link failure for HFA helper functions (#996).
+        Build a generic ffi_call_plan fallback on Windows x86-64.
+        Add Windows ARM64 (MSVC) build and continuous integration support.
+
+    3.7.0 July-7-2026
+        Add reusable call plans (ffi_call_plan_alloc/ffi_call_plan_invoke/ffi_call_plan_free).
+        Fix PA-RISC build broken by the conditional __int128 support added in 3.6.0.
+        Fix PA-RISC stack overflow passing many small structs by value.
+        Fix powerpc aix/darwin closure build errors (#987).
+        Include .note.GNU-stack on FreeBSD/x86 (#991).
+        Fix MSVC Win32 spin-lock atomics in bundled dlmalloc (#989).
+        Harden static trampoline and x86_64 closure internals.
+        Fix ffi_call clobbering the caller's argument pointer array
+          when passing large structs by value.
+        Allow a NULL rvalue in ffi_call to discard the return value.
+        Fix wasm widening of integral returns narrower than ffi_arg.
+
+    3.6.0 Jun-20-2026
+        Add LoongArch32 support.
+        Add RISC-V static trampoline support.
+        Add aarch64 GCS (Guarded Control Stack) support.
+        Add aarch64 feature build attribute support.
+        Add ppc64le ELFv2 complex type support.
+        Add conditional target support for __int128.
+        Add x86_64 IEEE binary128 long double support (e.g. x86_64 Android).
+        Update bundled dlmalloc to upstream 2.8.6.
+        Fix closures using FFI_REGISTER ABI.
+        Fix SH linker errors with __USER_LABEL_PREFIX__.
+        Fix compilation for ARM Windows targets.
+        Fix compilation for Cortex-A53.
+        Fix test compilation for some Android platforms.
+        Fix x86 ASAN compatibility for win64.
+        Fix clang -Werror-semi builds on riscv, or1k, loongarch.
+        Fix NULL deref in dlmalloc sys_trim on heap corruption.
+        Fix ThreadSanitizer data race in dlmalloc mparams init (#873).
+        Define WIN32_LEAN_AND_MEAN before including windows.h.
+        Fix comments that trip up some toolchains.
+
+    3.5.2 Aug-2-2025
+        Add wasm64 support.
+        Add DragonFly BSD support.
+        Ensure trampoline file descriptors are closed on exec.
+
+    3.5.1 Jun-10-2025
+        Fix symbol versioning error.
+
+    3.5.0 Jun-8-2025
+        Add FFI_VERSION_STRING and FFI_VERSION_NUMBER macros, as well
+          as ffi_get_version() and ffi_get_version_number() functions.
+        Add ffi_get_default_abi() and ffi_get_closure_size() functions.
+        Fix closures on powerpc64-linux when statically linking.
+        Mark the PA stack as non-executable.
+
+    3.4.8 Apr-9-2025
+        Add static trampoline support for powerpc-linux (32-bit SYSV BE),
+          powerpc64-linux (64-bit ELFv1 BE) and
+          powerpc64le-linux (64-bit ELFv2 LE)
+        Various x86-64 bug fixes (x32 ABI and improper memory access for
+          small argument calls).
+        Fix to enable pointer authentication for aarch64.
+
+    3.4.7 Feb-8-2025
+        Add static trampoline support for Linux on s390x.
+        Fix BTI support for ARM64.
+        Support pointer authentication for ARM64.
+        Fix ASAN compatibility.
+        Fix x86-64 calls with 6 GP registers and some SSE registers.
+        Miscellaneous fixes for ARC and Darwin ARM64.
+        Fix OpenRISC or1k and Solaris 10 builds.
+        Remove nios2 port.
+
+    3.4.6 Feb-18-2024
+        Fix long double regression on mips64 and alpha.
+
+    3.4.5 Feb-15-2024
+        Add support for wasm32.
+        Add support for aarch64 branch target identification (bti).
+        Add support for ARCv3: ARC32 & ARC64.
+        Add support for HPPA64, and many HPPA fixes.
+        Add support for Haikuos on PowerPC.
+        Fixes for AIX, loongson, MIPS, power, sparc64, and x86 Darwin.
 
     3.4.4 Oct-23-2022
         Important aarch64 fixes, including support for linux builds
@@ -461,8 +593,9 @@ developers:
     frv                 Anthony Green
     ia64                Hans Boehm
     kvx                 Yann Sionneau
-    loongarch64         Cheng Lulu, Xi Ruoyao, Xu Hao,
-                        Zhang Wenlong, Pan Xuefeng
+    loongarch           Cheng Lulu, Xi Ruoyao, Xu Hao,
+                        Zhang Wenlong, Pan Xuefeng,
+                        Meng Qinggang
     m32r                Kazuhiro Inaoka
     m68k                Andreas Schwab
     m88k                Miod Vallat
@@ -471,9 +604,9 @@ developers:
     mips                Anthony Green, Casey Marshall
     mips64              David Daney
     moxie               Anthony Green
-    nios ii             Sandra Loosemore
     openrisc            Sebastian Macke
     pa                  Randolph Chung, Dave Anglin, Andreas Tobler
+    pa64                Dave Anglin
     powerpc             Geoffrey Keating, Andreas Tobler,
                         David Edelsohn, John Hornkvist
     powerpc64           Jakub Jelinek
@@ -484,6 +617,7 @@ developers:
     sparc               Anthony Green, Gordon Irlam
     tile-gx/tilepro     Walter Lee
     vax                 Miod Vallat
+    wasm32              Hood Chatham, Brion Vibber, Kleis Auke Wolthuizen
     x86                 Anthony Green, Jon Beniston
     x86-64              Bo Thorsen
     xtensa              Chris Zankel
