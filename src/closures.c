@@ -584,13 +584,19 @@ ffi_deinit (void)
       size_t size = sp->size;
       flag_t flag = get_segment_flags (sp);
 
-      sp = sp->next;
+      msegment segment = *sp;
+      sp = segment.next;
+      gm->seg = segment;
 
       if ((flag & USE_MMAP_BIT) && !(flag & EXTERN_BIT))
         {
           CALL_MUNMAP (base, size);
         }
     }
+
+  gm->seg.base = NULL;
+  gm->seg.size = 0;
+  gm->seg.next = NULL;
 
   (void) DESTROY_LOCK (&gm->mutex);
 }
