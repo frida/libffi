@@ -573,13 +573,25 @@ ffi_deinit (void)
       size_t size = sp->size;
       flag_t flag = get_segment_flags (sp);
 
-      sp = sp->next;
+      /* CALL_MUNMAP reaches dlmunmap(), which walks gm->seg to find the
+	 segment being released. Older segment records live inside their own
+	 mappings, so once one of those is unmapped the next lookup would
+	 dereference freed memory. Keep the current record in the persistent
+	 head (gm->seg) for as long as its mapping is still being released,
+	 and only then move on to the next, still-mapped record. */
+      msegment segment = *sp;
+      sp = segment.next;
+      gm->seg = segment;
 
       if ((flag & IS_MMAPPED_BIT) && !(flag & EXTERN_BIT))
         {
           CALL_MUNMAP (base, size);
         }
     }
+
+  gm->seg.next = NULL;
+  gm->seg.size = 0;
+  gm->seg.base = NULL;
 
   (void) DESTROY_LOCK (&gm->mutex);
 }
